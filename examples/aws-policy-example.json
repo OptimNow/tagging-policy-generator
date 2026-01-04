@@ -1,0 +1,53 @@
+{
+  "tags": {
+    "CostCenter": {
+      "tag_key": {
+        "@@assign": "CostCenter"
+      },
+      "tag_value": {
+        "@@assign": ["Engineering", "Marketing", "Sales", "Operations", "Finance"]
+      },
+      "enforced_for": {
+        "@@assign": ["ec2:*", "rds:*", "s3:*"]
+      }
+    },
+    "Environment": {
+      "tag_key": {
+        "@@assign": "Environment"
+      },
+      "tag_value": {
+        "@@assign": ["production", "staging", "development", "test"]
+      },
+      "enforced_for": {
+        "@@assign": ["ec2:instance", "rds:db", "lambda:function"]
+      }
+    },
+    "Owner": {
+      "tag_key": {
+        "@@assign": "Owner"
+      },
+      "enforced_for": {
+        "@@assign": ["ec2:*", "rds:*", "s3:bucket"]
+      }
+    },
+    "Project": {
+      "tag_key": {
+        "@@assign": "Project"
+      },
+      "tag_value": {
+        "@@assign": ["alpha", "beta", "gamma", "delta", "omega"]
+      }
+    },
+    "DataClassification": {
+      "tag_key": {
+        "@@assign": "DataClassification"
+      },
+      "tag_value": {
+        "@@assign": ["public", "internal", "confidential", "restricted"]
+      },
+      "enforced_for": {
+        "@@assign": ["s3:bucket", "rds:db"]
+      }
+    }
+  }
+}
