@@ -1,0 +1,5 @@
+{
+  "name": "AWS Tagging Policy Generator",
+  "description": "A client-side web application for creating and validating FinOps tagging policies for AWS resources.",
+  "requestFramePermissions": []
+}
