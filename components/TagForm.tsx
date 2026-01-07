@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RequiredTag, OptionalTag, AWS_RESOURCE_TYPES, RESOURCE_CATEGORIES, OTHER_RESOURCES_MARKER } from '../types';
+import { RequiredTag, OptionalTag, AWS_RESOURCE_TYPES, RESOURCE_CATEGORIES } from '../types';
 import { Input, TextArea, Checkbox } from './Input';
 import { Button } from './Button';
 import { useTheme } from '../context/ThemeContext';
@@ -46,13 +46,12 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
     if (!isRequired) return;
     onChange({
       ...tag,
-      applies_to: checked ? [...AWS_RESOURCE_TYPES, OTHER_RESOURCES_MARKER] : []
+      applies_to: checked ? [...AWS_RESOURCE_TYPES] : []
     } as RequiredTag);
   };
 
   const isAllSelected = isRequired &&
-    (tag as RequiredTag).applies_to.length === AWS_RESOURCE_TYPES.length + 1 &&
-    (tag as RequiredTag).applies_to.includes(OTHER_RESOURCES_MARKER);
+    (tag as RequiredTag).applies_to.length === AWS_RESOURCE_TYPES.length;
 
   const toggleCategory = (categoryName: string) => {
     setExpandedCategories(prev => {
@@ -269,33 +268,6 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
                       </div>
                     );
                   })}
-                  {/* Other Resources Option */}
-                  <div className={`${isDark ? 'border-t border-white/5' : 'border-t border-gray-200'}`}>
-                    <div
-                      className={`flex items-center gap-2 px-3 py-2 select-none ${isDark ? 'hover:bg-white/5' : 'hover:bg-gray-100'}`}
-                    >
-                      <div className="p-0.5 w-[18px]"></div>
-                      <div className="flex-1 flex items-center gap-2">
-                        <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-charcoal'}`}>
-                          All Other Resources
-                        </span>
-                        <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                          Apply to unlisted services
-                        </span>
-                      </div>
-                      <Checkbox
-                        label=""
-                        checked={(tag as RequiredTag).applies_to.includes(OTHER_RESOURCES_MARKER)}
-                        onChange={(e) => {
-                          const current = (tag as RequiredTag).applies_to;
-                          const updated = e.target.checked
-                            ? [...current, OTHER_RESOURCES_MARKER]
-                            : current.filter(r => r !== OTHER_RESOURCES_MARKER);
-                          onChange({ ...tag, applies_to: updated } as RequiredTag);
-                        }}
-                      />
-                    </div>
-                  </div>
                 </div>
                 {(tag as RequiredTag).applies_to.length === 0 && <span className="text-xs text-red-400">Select at least one resource.</span>}
               </div>

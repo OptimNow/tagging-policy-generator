@@ -20,7 +20,7 @@ export function convertAwsPolicyToMcp(awsPolicyString: string): Policy {
     
     const appliesTo = enforcedFor.length > 0
       ? parseEnforcedFor(enforcedFor)
-      : ['ec2:instance', 'rds:db-instance', 's3:bucket', 'lambda:function']; // Default fallback
+      : ['ec2:instance', 's3:bucket', 'lambda:function']; // Default fallback (only supported types)
     
     const description = `Converted from AWS Organizations tag policy - ${key}`;
 

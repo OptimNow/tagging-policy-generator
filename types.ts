@@ -35,7 +35,7 @@ export interface ResourceCategory {
 }
 
 // AWS Tag Policy enforced_for resource types
-// Format: service:resource-type (using AWS's actual resource type names)
+// Only includes resource types with "Enforce for IaC" = Yes per AWS documentation
 // Reference: https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_supported-resources-enforcement.html
 export const RESOURCE_CATEGORIES: ResourceCategory[] = [
   {
@@ -44,9 +44,9 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     resources: [
       'ec2:instance',
       'ec2:volume',
-      'ec2:snapshot',
       'lambda:function',
       'ecs:service',
+      'ecs:cluster',
       'ecs:task-definition',
       'eks:cluster',
       'eks:nodegroup',
@@ -57,20 +57,16 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     description: '10-20% of typical spend',
     resources: [
       's3:bucket',
-      'elasticfilesystem:file-system',
-      'fsx:file-system',
     ]
   },
   {
     name: 'Database',
     description: '15-25% of typical spend',
     resources: [
-      'rds:db-instance',
-      'rds:cluster',
+      'rds:db',
       'dynamodb:table',
       'elasticache:cluster',
       'redshift:cluster',
-      'es:domain',
     ]
   },
   {
@@ -79,7 +75,8 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     resources: [
       'sagemaker:endpoint',
       'sagemaker:notebook-instance',
-      'bedrock:provisioned-model-throughput',
+      'bedrock:agent',
+      'bedrock:knowledge-base',
     ]
   },
   {
@@ -87,7 +84,11 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     description: 'Often overlooked',
     resources: [
       'elasticloadbalancing:loadbalancer',
+      'elasticloadbalancing:targetgroup',
       'ec2:natgateway',
+      'ec2:vpc',
+      'ec2:subnet',
+      'ec2:security-group',
     ]
   },
   {
@@ -99,9 +100,6 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     ]
   },
 ];
-
-// Special marker for "all other resources" not explicitly listed
-export const OTHER_RESOURCES_MARKER = '*:*';
 
 // Flat list of all resource types (derived from categories)
 export const AWS_RESOURCE_TYPES = RESOURCE_CATEGORIES.flatMap(cat => cat.resources);
