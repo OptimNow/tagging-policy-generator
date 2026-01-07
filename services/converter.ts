@@ -58,11 +58,34 @@ export function convertAwsPolicyToMcp(awsPolicyString: string): Policy {
 function parseEnforcedFor(enforcedFor: string[]): string[] {
   const appliesTo: string[] = [];
   const serviceMap: Record<string, string[]> = {
-    'ec2': ['ec2:instance', 'ec2:volume', 'ec2:snapshot'],
-    's3': ['s3:bucket'],
-    'rds': ['rds:db'],
+    // Compute
+    'ec2': ['ec2:instance', 'ec2:volume', 'ec2:snapshot', 'ec2:natgateway'],
     'lambda': ['lambda:function'],
-    'ecs': ['ecs:service', 'ecs:task']
+    'ecs': ['ecs:service', 'ecs:task'],
+    'eks': ['eks:cluster', 'eks:nodegroup'],
+
+    // Storage
+    's3': ['s3:bucket'],
+    'efs': ['efs:file-system'],
+    'fsx': ['fsx:file-system'],
+
+    // Database
+    'rds': ['rds:db', 'rds:cluster'],
+    'dynamodb': ['dynamodb:table'],
+    'elasticache': ['elasticache:cluster'],
+    'redshift': ['redshift:cluster'],
+    'opensearch': ['opensearch:domain'],
+
+    // AI/ML
+    'sagemaker': ['sagemaker:endpoint', 'sagemaker:notebook-instance'],
+    'bedrock': ['bedrock:provisioned-model-throughput'],
+
+    // Networking
+    'elasticloadbalancing': ['elasticloadbalancing:loadbalancer'],
+
+    // Analytics & Streaming
+    'kinesis': ['kinesis:stream'],
+    'glue': ['glue:job']
   };
 
   for (const resource of enforcedFor) {

@@ -34,12 +34,22 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
     const updated = current.includes(resource)
       ? current.filter(r => r !== resource)
       : [...current, resource];
-    
+
     onChange({
       ...tag,
       applies_to: updated
     } as RequiredTag);
   };
+
+  const handleApplyToAll = (checked: boolean) => {
+    if (!isRequired) return;
+    onChange({
+      ...tag,
+      applies_to: checked ? [...AWS_RESOURCE_TYPES] : []
+    } as RequiredTag);
+  };
+
+  const isAllSelected = isRequired && (tag as RequiredTag).applies_to.length === AWS_RESOURCE_TYPES.length;
 
   const testRegex = () => {
     const pattern = (tag as RequiredTag).validation_regex;
@@ -141,8 +151,15 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Applies To</label>
-                <div className={`grid grid-cols-2 gap-2 p-3 rounded ${isDark ? 'bg-black/20 border border-white/5' : 'bg-gray-50 border border-gray-200'}`}>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Applies To</label>
+                  <Checkbox
+                    label="Apply to All"
+                    checked={isAllSelected}
+                    onChange={(e) => handleApplyToAll(e.target.checked)}
+                  />
+                </div>
+                <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 rounded max-h-64 overflow-y-auto ${isDark ? 'bg-black/20 border border-white/5' : 'bg-gray-50 border border-gray-200'}`}>
                   {AWS_RESOURCE_TYPES.map(resource => (
                     <Checkbox
                       key={resource}

@@ -27,13 +27,41 @@ export interface Policy {
   tag_naming_rules: TagNamingRules;
 }
 
+// Organized by typical spend impact for FinOps prioritization
 export const AWS_RESOURCE_TYPES = [
+  // Compute - typically 40-60% of spend
   'ec2:instance',
   'ec2:volume',
   'ec2:snapshot',
-  'rds:db',
-  's3:bucket',
   'lambda:function',
   'ecs:service',
-  'ecs:task'
+  'ecs:task',
+  'eks:cluster',
+  'eks:nodegroup',
+
+  // Storage - typically 10-20% of spend
+  's3:bucket',
+  'efs:file-system',
+  'fsx:file-system',
+
+  // Database - typically 15-25% of spend
+  'rds:db',
+  'rds:cluster',
+  'dynamodb:table',
+  'elasticache:cluster',
+  'redshift:cluster',
+  'opensearch:domain',
+
+  // AI/ML - growing rapidly
+  'sagemaker:endpoint',
+  'sagemaker:notebook-instance',
+  'bedrock:provisioned-model-throughput',
+
+  // Networking - often overlooked but significant
+  'elasticloadbalancing:loadbalancer',
+  'ec2:natgateway',
+
+  // Analytics & Streaming
+  'kinesis:stream',
+  'glue:job',
 ];
