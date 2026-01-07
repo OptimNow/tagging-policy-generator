@@ -6,7 +6,8 @@ import { convertAwsPolicyToMcp } from './services/converter';
 import { Button } from './components/Button';
 import { Input, Checkbox } from './components/Input';
 import { TagForm } from './components/TagForm';
-import { FileJson, Plus, Download, Copy, LayoutTemplate, ArrowRight, AlertTriangle, Check, Terminal, CheckCircle } from 'lucide-react';
+import { useTheme } from './context/ThemeContext';
+import { FileJson, Plus, Download, Copy, LayoutTemplate, ArrowRight, AlertTriangle, Check, Terminal, CheckCircle, Sun, Moon } from 'lucide-react';
 
 const INITIAL_POLICY: Policy = {
   version: "1.0",
@@ -24,12 +25,15 @@ const INITIAL_POLICY: Policy = {
 type ViewState = 'start' | 'editor';
 
 const App: React.FC = () => {
+  const { theme, toggleTheme } = useTheme();
   const [view, setView] = useState<ViewState>('start');
   const [policy, setPolicy] = useState<Policy>(INITIAL_POLICY);
   const [awsImportText, setAwsImportText] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
+
+  const isDark = theme === 'dark';
 
   // Update validation whenever policy changes
   useEffect(() => {
@@ -148,49 +152,64 @@ const App: React.FC = () => {
 
   if (view === 'start') {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-charcoal text-white">
-        <div className="max-w-4xl w-full grid md:grid-cols-2 gap-8">
-          
-          {/* Header Section */}
-          <div className="md:col-span-2 text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/5 mb-6 border border-white/10">
-              <FileJson size={32} className="text-chartreuse" />
+      <div className={`min-h-screen flex flex-col p-6 ${isDark ? 'bg-charcoal text-white' : 'bg-light-grey text-charcoal'}`}>
+
+        {/* Top Bar with Logo and Theme Toggle */}
+        <div className="max-w-4xl w-full mx-auto flex items-center justify-between mb-8">
+          <img
+            src={isDark ? "/Images/logo-darkbackground.png" : "/Images/logo.png"}
+            alt="OptimNow Logo"
+            className="h-8"
+          />
+          <button
+            onClick={toggleTheme}
+            className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10 text-gray-400 hover:text-white' : 'hover:bg-charcoal/10 text-gray-600 hover:text-charcoal'}`}
+            aria-label="Toggle theme"
+          >
+            {isDark ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+        </div>
+
+        <div className="flex-1 flex items-center justify-center">
+          <div className="max-w-4xl w-full grid md:grid-cols-2 gap-8">
+
+            {/* Header Section */}
+            <div className="md:col-span-2 text-center mb-8">
+              <h1 className="text-3xl md:text-4xl font-bold mb-4">AWS Tagging Policy Generator</h1>
+              <p className={`max-w-lg mx-auto ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                Create, validate, and export standard FinOps tagging policies for your AWS infrastructure.
+                Pure client-side, secure, and ready for MCP.
+              </p>
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-4">AWS Tagging Policy Generator</h1>
-            <p className="text-gray-400 max-w-lg mx-auto">
-              Create, validate, and export standard FinOps tagging policies for your AWS infrastructure. 
-              Pure client-side, secure, and ready for MCP.
-            </p>
-          </div>
 
           {/* Option 1: Create New */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col items-start">
+          <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col items-start ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
             <div className="w-12 h-12 rounded-full bg-chartreuse/10 flex items-center justify-center mb-4">
               <Plus className="text-chartreuse" />
             </div>
             <h2 className="text-xl font-bold mb-2">Create from Scratch</h2>
-            <p className="text-gray-400 text-sm mb-8 flex-1">
+            <p className={`text-sm mb-8 flex-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
               Start with a blank canvas or use a template to build your policy step-by-step.
             </p>
-            
+
             <div className="w-full space-y-3">
               <Button onClick={() => setView('editor')} className="w-full justify-between group">
                 Start Blank <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
               </Button>
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-white/10"></div>
+                  <div className={`w-full border-t ${isDark ? 'border-white/10' : 'border-gray-200'}`}></div>
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-[#333333] px-2 text-gray-500 rounded">Or pick a template</span>
+                  <span className={`px-2 text-gray-500 rounded ${isDark ? 'bg-[#333333]' : 'bg-white'}`}>Or pick a template</span>
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-2">
                  {TEMPLATES.map(t => (
-                   <button 
+                   <button
                     key={t.name}
                     onClick={() => applyTemplate(t.name)}
-                    className="flex items-center gap-2 p-3 rounded bg-white/5 hover:bg-white/10 text-sm text-left transition-colors border border-transparent hover:border-white/20"
+                    className={`flex items-center gap-2 p-3 rounded text-sm text-left transition-colors border border-transparent ${isDark ? 'bg-white/5 hover:bg-white/10 hover:border-white/20' : 'bg-gray-50 hover:bg-gray-100 hover:border-gray-300'}`}
                    >
                      <LayoutTemplate size={14} className="text-gray-400" />
                      <span className="flex-1">{t.name}</span>
@@ -201,16 +220,16 @@ const App: React.FC = () => {
           </div>
 
           {/* Option 2: Import */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col items-start">
+          <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col items-start ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
             <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mb-4">
               <Terminal className="text-blue-400" />
             </div>
             <h2 className="text-xl font-bold mb-2">Import AWS Policy</h2>
-            <p className="text-gray-400 text-sm mb-6">
+            <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
               Paste an existing AWS Organizations JSON policy to convert it automatically.
             </p>
-            <textarea 
-              className="w-full flex-1 bg-black/30 border border-white/10 rounded-lg p-3 text-xs font-mono text-gray-300 focus:outline-none focus:border-chartreuse mb-4 resize-none"
+            <textarea
+              className={`w-full flex-1 rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
               placeholder='{"tags": { ... }}'
               value={awsImportText}
               onChange={(e) => setAwsImportText(e.target.value)}
@@ -225,6 +244,7 @@ const App: React.FC = () => {
             </Button>
           </div>
 
+          </div>
         </div>
       </div>
     );
@@ -233,57 +253,68 @@ const App: React.FC = () => {
   // --- Editor View ---
 
   return (
-    <div className="flex h-screen flex-col md:flex-row bg-charcoal overflow-hidden">
-      
+    <div className={`flex h-screen flex-col md:flex-row overflow-hidden ${isDark ? 'bg-charcoal' : 'bg-light-grey'}`}>
+
       {/* LEFT PANEL: FORM BUILDER */}
-      <div className="w-full md:w-1/2 lg:w-3/5 h-full flex flex-col border-r border-white/10">
-        
+      <div className={`w-full md:w-1/2 lg:w-3/5 h-full flex flex-col ${isDark ? 'border-r border-white/10' : 'border-r border-gray-200'}`}>
+
         {/* Header */}
-        <div className="h-16 px-6 border-b border-white/10 flex items-center justify-between bg-charcoal shrink-0">
+        <div className={`h-16 px-6 flex items-center justify-between shrink-0 ${isDark ? 'border-b border-white/10 bg-charcoal' : 'border-b border-gray-200 bg-white'}`}>
           <div className="flex items-center gap-3">
-             <div onClick={() => setView('start')} className="cursor-pointer hover:bg-white/10 p-2 rounded-full transition-colors">
-               <FileJson className="text-chartreuse" size={24} />
+             <div onClick={() => setView('start')} className={`cursor-pointer p-2 rounded-full transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}>
+               <img
+                 src={isDark ? "/Images/logo-darkbackground.png" : "/Images/logo.png"}
+                 alt="OptimNow Logo"
+                 className="h-6"
+               />
              </div>
-             <h1 className="font-bold text-lg hidden sm:block">Policy Builder</h1>
+             <h1 className={`font-bold text-lg hidden sm:block ${isDark ? 'text-white' : 'text-charcoal'}`}>Policy Builder</h1>
           </div>
           <div className="flex items-center gap-2">
-            <select 
-              className="bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-chartreuse text-gray-300"
+            <select
+              className={`rounded px-3 py-1.5 text-sm focus:outline-none focus:border-chartreuse ${isDark ? 'bg-white/5 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
               onChange={(e) => applyTemplate(e.target.value)}
               value=""
             >
               <option value="" disabled>Load Template...</option>
               {TEMPLATES.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
             </select>
+            <button
+              onClick={toggleTheme}
+              className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-600 hover:text-charcoal'}`}
+              aria-label="Toggle theme"
+            >
+              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
           </div>
         </div>
 
         {/* Scrollable Form Content */}
-        <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
-          
+        <div className={`flex-1 overflow-y-auto p-6 scroll-smooth ${isDark ? '' : 'bg-light-grey'}`}>
+
           {/* Naming Rules */}
           <section className="mb-8">
             <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Global Naming Rules</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-white/5 p-4 rounded-lg border border-white/10">
-              <Checkbox 
-                label="Case Sensitive" 
-                checked={policy.tag_naming_rules.case_sensitivity} 
+            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-lg ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
+              <Checkbox
+                label="Case Sensitive"
+                checked={policy.tag_naming_rules.case_sensitivity}
                 onChange={(e) => setPolicy({ ...policy, tag_naming_rules: { ...policy.tag_naming_rules, case_sensitivity: e.target.checked } })}
               />
-              <Checkbox 
-                label="Allow Special Chars" 
-                checked={policy.tag_naming_rules.allow_special_characters} 
+              <Checkbox
+                label="Allow Special Chars"
+                checked={policy.tag_naming_rules.allow_special_characters}
                 onChange={(e) => setPolicy({ ...policy, tag_naming_rules: { ...policy.tag_naming_rules, allow_special_characters: e.target.checked } })}
               />
-              <Input 
-                type="number" 
-                label="Max Key Len" 
+              <Input
+                type="number"
+                label="Max Key Len"
                 value={policy.tag_naming_rules.max_key_length}
                 onChange={(e) => setPolicy({ ...policy, tag_naming_rules: { ...policy.tag_naming_rules, max_key_length: parseInt(e.target.value) || 0 } })}
               />
-              <Input 
-                type="number" 
-                label="Max Value Len" 
+              <Input
+                type="number"
+                label="Max Value Len"
                 value={policy.tag_naming_rules.max_value_length}
                 onChange={(e) => setPolicy({ ...policy, tag_naming_rules: { ...policy.tag_naming_rules, max_value_length: parseInt(e.target.value) || 0 } })}
               />
@@ -296,19 +327,19 @@ const App: React.FC = () => {
                <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Required Tags</h2>
                <span className="text-xs bg-chartreuse/20 text-chartreuse px-2 py-0.5 rounded-full">{policy.required_tags.length}</span>
             </div>
-            
+
             {policy.required_tags.map((tag, idx) => (
-              <TagForm 
-                key={idx} 
+              <TagForm
+                key={idx}
                 index={idx}
-                tag={tag} 
-                isRequired={true} 
+                tag={tag}
+                isRequired={true}
                 onChange={(updated) => updateRequiredTag(idx, updated)}
                 onRemove={() => removeRequiredTag(idx)}
               />
             ))}
-            
-            <Button onClick={addRequiredTag} variant="secondary" className="w-full border-dashed border-2 border-gray-600 bg-transparent text-gray-400 hover:text-white hover:border-gray-400 hover:bg-white/5">
+
+            <Button onClick={addRequiredTag} variant="secondary" className={`w-full border-dashed border-2 bg-transparent ${isDark ? 'border-gray-600 text-gray-400 hover:text-white hover:border-gray-400 hover:bg-white/5' : 'border-gray-300 text-gray-500 hover:text-charcoal hover:border-gray-400 hover:bg-white'}`}>
               <Plus size={16} className="mr-2"/> Add Required Tag
             </Button>
           </section>
@@ -317,21 +348,21 @@ const App: React.FC = () => {
           <section className="mb-8">
             <div className="flex items-center justify-between mb-4">
                <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Optional Tags</h2>
-               <span className="text-xs bg-white/10 text-gray-400 px-2 py-0.5 rounded-full">{policy.optional_tags.length}</span>
+               <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-white/10 text-gray-400' : 'bg-gray-200 text-gray-600'}`}>{policy.optional_tags.length}</span>
             </div>
-            
+
             {policy.optional_tags.map((tag, idx) => (
-              <TagForm 
-                key={idx} 
+              <TagForm
+                key={idx}
                 index={idx}
-                tag={tag} 
-                isRequired={false} 
+                tag={tag}
+                isRequired={false}
                 onChange={(updated) => updateOptionalTag(idx, updated)}
                 onRemove={() => removeOptionalTag(idx)}
               />
             ))}
-            
-            <Button onClick={addOptionalTag} variant="ghost" className="w-full border-dashed border-2 border-gray-700 text-gray-500 hover:text-white hover:border-gray-500">
+
+            <Button onClick={addOptionalTag} variant="ghost" className={`w-full border-dashed border-2 ${isDark ? 'border-gray-700 text-gray-500 hover:text-white hover:border-gray-500' : 'border-gray-300 text-gray-500 hover:text-charcoal hover:border-gray-400'}`}>
               <Plus size={16} className="mr-2"/> Add Optional Tag
             </Button>
           </section>
@@ -342,13 +373,13 @@ const App: React.FC = () => {
       </div>
 
       {/* RIGHT PANEL: PREVIEW */}
-      <div className="w-full md:w-1/2 lg:w-2/5 bg-light-grey flex flex-col h-full border-l border-white/10 relative">
-        
+      <div className={`w-full md:w-1/2 lg:w-2/5 flex flex-col h-full relative ${isDark ? 'bg-[#1a1a1a] border-l border-white/10' : 'bg-white border-l border-gray-200'}`}>
+
         {/* Toolbar */}
-        <div className="h-16 px-4 bg-light-grey border-b border-gray-300 flex items-center justify-between shrink-0">
+        <div className={`h-16 px-4 flex items-center justify-between shrink-0 ${isDark ? 'bg-[#1a1a1a] border-b border-white/10' : 'bg-white border-b border-gray-200'}`}>
           <span className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2">Live Preview</span>
           <div className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={copyToClipboard} className="bg-white border border-gray-200 text-gray-700 hover:bg-gray-50">
+            <Button size="sm" variant="secondary" onClick={copyToClipboard} className={isDark ? 'bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'}>
                {copied ? <Check size={14} className="mr-1 text-green-600"/> : <Copy size={14} className="mr-1"/>}
                {copied ? "Copied" : "Copy"}
             </Button>
@@ -359,28 +390,28 @@ const App: React.FC = () => {
         </div>
 
         {/* JSON Preview */}
-        <div className="flex-1 overflow-auto p-4 relative group bg-[#F4F4F4]">
-           <pre className="font-mono text-xs text-charcoal leading-relaxed p-2">
+        <div className={`flex-1 overflow-auto p-4 relative group ${isDark ? 'bg-[#111111]' : 'bg-[#F4F4F4]'}`}>
+           <pre className={`font-mono text-xs leading-relaxed p-2 ${isDark ? 'text-gray-300' : 'text-charcoal'}`}>
              {JSON.stringify(policy, null, 2)}
            </pre>
         </div>
 
         {/* Validation Footer */}
-        <div className={`shrink-0 p-4 transition-all duration-300 ${validationErrors.length > 0 ? 'bg-red-50 border-t border-red-200 h-auto max-h-48 overflow-y-auto' : 'bg-green-50 border-t border-green-200 h-12 flex items-center'}`}>
+        <div className={`shrink-0 p-4 transition-all duration-300 ${validationErrors.length > 0 ? (isDark ? 'bg-red-900/30 border-t border-red-800 h-auto max-h-48 overflow-y-auto' : 'bg-red-50 border-t border-red-200 h-auto max-h-48 overflow-y-auto') : (isDark ? 'bg-green-900/30 border-t border-green-800 h-12 flex items-center' : 'bg-green-50 border-t border-green-200 h-12 flex items-center')}`}>
            {validationErrors.length > 0 ? (
              <div>
-               <div className="flex items-center gap-2 text-red-600 font-bold text-sm mb-2 sticky top-0 bg-red-50">
+               <div className={`flex items-center gap-2 font-bold text-sm mb-2 sticky top-0 ${isDark ? 'text-red-400 bg-red-900/30' : 'text-red-600 bg-red-50'}`}>
                  <AlertTriangle size={16} />
                  {validationErrors.length} Validation Errors
                </div>
                <ul className="list-disc pl-5 space-y-1">
                  {validationErrors.map((err, i) => (
-                   <li key={i} className="text-xs text-red-700">{err}</li>
+                   <li key={i} className={`text-xs ${isDark ? 'text-red-300' : 'text-red-700'}`}>{err}</li>
                  ))}
                </ul>
              </div>
            ) : (
-             <div className="flex items-center gap-2 text-green-700 text-sm font-medium w-full justify-center">
+             <div className={`flex items-center gap-2 text-sm font-medium w-full justify-center ${isDark ? 'text-green-400' : 'text-green-700'}`}>
                <CheckCircle size={16} /> Policy Valid
              </div>
            )}
