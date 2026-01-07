@@ -241,6 +241,17 @@ When you create a policy with resources `['ec2:instance', 'rds:db', 'sagemaker:e
 
 Notice that `sagemaker` is excluded from `enforced_for` (no enforcement support) but included in `report_required_tag_for` (reporting works fine).
 
+### Complete example
+
+For a full working example of a properly formatted AWS Tag Policy, see:
+[examples/aws-policy-example.json](../examples/aws-policy-example.json)
+
+This example demonstrates:
+- Multiple tags with different enforcement scopes
+- Correct `service:ALL_SUPPORTED` syntax in `enforced_for`
+- Comprehensive `report_required_tag_for` including services without enforcement support
+- Tags with and without value restrictions
+
 ### Bottom line
 
 AWS Tag Policy JSON is complex because it evolved separately from IaC tooling and has different rules for different capabilities. The generator abstracts this complexity so you can focus on what matters: defining which tags your organization needs for cost attribution.
