@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { RequiredTag, OptionalTag, AWS_RESOURCE_TYPES } from '../types';
+import { RequiredTag, OptionalTag, AWS_RESOURCE_TYPES, RESOURCE_CATEGORIES } from '../types';
 import { Input, TextArea, Checkbox } from './Input';
 import { Button } from './Button';
 import { useTheme } from '../context/ThemeContext';
-import { Trash2, ChevronDown, ChevronUp, AlertCircle, CheckCircle } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronUp, AlertCircle, CheckCircle, ChevronRight } from 'lucide-react';
 
 interface TagFormProps {
   tag: RequiredTag | OptionalTag;
@@ -19,6 +19,7 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
   const [isExpanded, setIsExpanded] = useState(true);
   const [testRegexInput, setTestRegexInput] = useState('');
   const [regexTestResult, setRegexTestResult] = useState<boolean | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(RESOURCE_CATEGORIES.map(c => c.name)));
 
   const handleAllowedValuesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -50,6 +51,52 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
   };
 
   const isAllSelected = isRequired && (tag as RequiredTag).applies_to.length === AWS_RESOURCE_TYPES.length;
+
+  const toggleCategory = (categoryName: string) => {
+    setExpandedCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(categoryName)) {
+        newSet.delete(categoryName);
+      } else {
+        newSet.add(categoryName);
+      }
+      return newSet;
+    });
+  };
+
+  const handleCategoryToggle = (categoryResources: string[], checked: boolean) => {
+    if (!isRequired) return;
+    const current = (tag as RequiredTag).applies_to;
+    let updated: string[];
+    if (checked) {
+      updated = [...new Set([...current, ...categoryResources])];
+    } else {
+      updated = current.filter(r => !categoryResources.includes(r));
+    }
+    onChange({
+      ...tag,
+      applies_to: updated
+    } as RequiredTag);
+  };
+
+  const isCategoryFullySelected = (categoryResources: string[]) => {
+    if (!isRequired) return false;
+    const current = (tag as RequiredTag).applies_to;
+    return categoryResources.every(r => current.includes(r));
+  };
+
+  const isCategoryPartiallySelected = (categoryResources: string[]) => {
+    if (!isRequired) return false;
+    const current = (tag as RequiredTag).applies_to;
+    const selectedCount = categoryResources.filter(r => current.includes(r)).length;
+    return selectedCount > 0 && selectedCount < categoryResources.length;
+  };
+
+  const getCategorySelectedCount = (categoryResources: string[]) => {
+    if (!isRequired) return 0;
+    const current = (tag as RequiredTag).applies_to;
+    return categoryResources.filter(r => current.includes(r)).length;
+  };
 
   const testRegex = () => {
     const pattern = (tag as RequiredTag).validation_regex;
@@ -159,15 +206,67 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
                     onChange={(e) => handleApplyToAll(e.target.checked)}
                   />
                 </div>
-                <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 rounded max-h-64 overflow-y-auto ${isDark ? 'bg-black/20 border border-white/5' : 'bg-gray-50 border border-gray-200'}`}>
-                  {AWS_RESOURCE_TYPES.map(resource => (
-                    <Checkbox
-                      key={resource}
-                      label={resource}
-                      checked={(tag as RequiredTag).applies_to.includes(resource)}
-                      onChange={() => handleAppliesToChange(resource)}
-                    />
-                  ))}
+                <div className={`rounded overflow-hidden ${isDark ? 'bg-black/20 border border-white/5' : 'bg-gray-50 border border-gray-200'}`}>
+                  {RESOURCE_CATEGORIES.map((category) => {
+                    const isOpen = expandedCategories.has(category.name);
+                    const isFullySelected = isCategoryFullySelected(category.resources);
+                    const isPartiallySelected = isCategoryPartiallySelected(category.resources);
+                    const selectedCount = getCategorySelectedCount(category.resources);
+
+                    return (
+                      <div key={category.name} className={`${isDark ? 'border-b border-white/5 last:border-b-0' : 'border-b border-gray-200 last:border-b-0'}`}>
+                        {/* Category Header */}
+                        <div
+                          className={`flex items-center gap-2 px-3 py-2 cursor-pointer select-none ${isDark ? 'hover:bg-white/5' : 'hover:bg-gray-100'}`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleCategory(category.name)}
+                            className="p-0.5"
+                          >
+                            {isOpen ? (
+                              <ChevronDown size={14} className="text-gray-400" />
+                            ) : (
+                              <ChevronRight size={14} className="text-gray-400" />
+                            )}
+                          </button>
+                          <div className="flex-1 flex items-center gap-2" onClick={() => toggleCategory(category.name)}>
+                            <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-charcoal'}`}>
+                              {category.name}
+                            </span>
+                            <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                              {category.description}
+                            </span>
+                          </div>
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${selectedCount > 0 ? 'bg-chartreuse/20 text-chartreuse' : isDark ? 'bg-white/10 text-gray-500' : 'bg-gray-200 text-gray-500'}`}>
+                            {selectedCount}/{category.resources.length}
+                          </span>
+                          <Checkbox
+                            label=""
+                            checked={isFullySelected}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handleCategoryToggle(category.resources, e.target.checked);
+                            }}
+                            className={isPartiallySelected ? 'opacity-50' : ''}
+                          />
+                        </div>
+                        {/* Category Resources */}
+                        {isOpen && (
+                          <div className={`grid grid-cols-2 gap-1 px-3 pb-2 pt-1 ${isDark ? 'bg-black/20' : 'bg-white/50'}`}>
+                            {category.resources.map(resource => (
+                              <Checkbox
+                                key={resource}
+                                label={resource.split(':')[1]}
+                                checked={(tag as RequiredTag).applies_to.includes(resource)}
+                                onChange={() => handleAppliesToChange(resource)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 {(tag as RequiredTag).applies_to.length === 0 && <span className="text-xs text-red-400">Select at least one resource.</span>}
               </div>

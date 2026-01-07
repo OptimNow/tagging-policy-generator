@@ -385,6 +385,16 @@ const App: React.FC = () => {
               <option value="" disabled>Load Template...</option>
               {TEMPLATES.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
             </select>
+            <a
+              href="https://github.com/OptimNow/tagging-policy-generator/blob/main/USER_MANUAL.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-600 hover:text-charcoal'}`}
+              aria-label="User Manual"
+              title="User Manual"
+            >
+              <BookOpen size={18} />
+            </a>
             <button
               onClick={toggleTheme}
               className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-600 hover:text-charcoal'}`}
