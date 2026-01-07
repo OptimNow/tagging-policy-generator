@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Policy, RequiredTag, OptionalTag } from './types';
 import { TEMPLATES } from './services/templates';
 import { validatePolicy } from './services/validator';
-import { convertAwsPolicyToMcp } from './services/converter';
-import { downloadJson, downloadMarkdown } from './services/exporter';
+import { convertAwsPolicyToMcp, getAwsExportWarnings } from './services/converter';
+import { downloadJson, downloadMarkdown, downloadAwsPolicy } from './services/exporter';
 import { Button } from './components/Button';
 import { Input, Checkbox } from './components/Input';
 import { TagForm } from './components/TagForm';
@@ -153,6 +153,18 @@ const App: React.FC = () => {
 
   const handleDownloadMarkdown = () => {
     downloadMarkdown(policy);
+    setShowDownloadMenu(false);
+  };
+
+  const handleDownloadAwsPolicy = () => {
+    const warnings = getAwsExportWarnings(policy);
+    if (warnings.length > 0) {
+      const proceed = window.confirm(
+        `Note: Some features will not be preserved in AWS format:\n\n${warnings.join('\n')}\n\nContinue with export?`
+      );
+      if (!proceed) return;
+    }
+    downloadAwsPolicy(policy);
     setShowDownloadMenu(false);
   };
 
@@ -425,12 +437,18 @@ const App: React.FC = () => {
                 <Download size={14} className="mr-1"/> Download <ChevronDown size={14} className="ml-1"/>
               </Button>
               {showDownloadMenu && (
-                <div className={`absolute right-0 top-full mt-1 py-1 rounded-lg shadow-lg z-10 min-w-[140px] ${isDark ? 'bg-[#2a2a2a] border border-white/10' : 'bg-white border border-gray-200'}`}>
+                <div className={`absolute right-0 top-full mt-1 py-1 rounded-lg shadow-lg z-10 min-w-[160px] ${isDark ? 'bg-[#2a2a2a] border border-white/10' : 'bg-white border border-gray-200'}`}>
                   <button
                     onClick={handleDownloadJson}
                     className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}
                   >
                     JSON
+                  </button>
+                  <button
+                    onClick={handleDownloadAwsPolicy}
+                    className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}
+                  >
+                    AWS Tag Policy
                   </button>
                   <button
                     onClick={handleDownloadMarkdown}

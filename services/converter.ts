@@ -64,7 +64,7 @@ function parseEnforcedFor(enforcedFor: string[]): string[] {
     'lambda': ['lambda:function'],
     'ecs': ['ecs:service', 'ecs:task']
   };
-  
+
   for (const resource of enforcedFor) {
     if (resource.includes(':ALL_SUPPORTED')) {
       const service = resource.split(':')[0];
@@ -77,6 +77,78 @@ function parseEnforcedFor(enforcedFor: string[]): string[] {
       appliesTo.push(resource);
     }
   }
-  
+
   return [...new Set(appliesTo)]; // Remove duplicates
+}
+
+// AWS Tag Policy format structure
+interface AwsTagPolicy {
+  tags: {
+    [tagName: string]: {
+      tag_key: { '@@assign': string };
+      tag_value?: { '@@assign': string[] };
+      enforced_for?: { '@@assign': string[] };
+    };
+  };
+}
+
+/**
+ * Convert our policy format to AWS Organizations Tag Policy format.
+ *
+ * Note: AWS Tag Policies do not support regex validation, so validation_regex
+ * fields will be ignored in the export. Only allowed_values will be converted.
+ */
+export function convertMcpToAwsPolicy(policy: Policy): AwsTagPolicy {
+  const awsPolicy: AwsTagPolicy = { tags: {} };
+
+  // Process required tags (these have enforced_for)
+  for (const tag of policy.required_tags) {
+    const tagConfig: AwsTagPolicy['tags'][string] = {
+      tag_key: { '@@assign': tag.name }
+    };
+
+    // Add allowed values if specified
+    if (tag.allowed_values && tag.allowed_values.length > 0) {
+      tagConfig.tag_value = { '@@assign': tag.allowed_values };
+    }
+
+    // Add enforced_for if applies_to is specified
+    if (tag.applies_to && tag.applies_to.length > 0) {
+      tagConfig.enforced_for = { '@@assign': tag.applies_to };
+    }
+
+    awsPolicy.tags[tag.name] = tagConfig;
+  }
+
+  // Process optional tags (no enforced_for)
+  for (const tag of policy.optional_tags) {
+    const tagConfig: AwsTagPolicy['tags'][string] = {
+      tag_key: { '@@assign': tag.name }
+    };
+
+    // Add allowed values if specified
+    if (tag.allowed_values && tag.allowed_values.length > 0) {
+      tagConfig.tag_value = { '@@assign': tag.allowed_values };
+    }
+
+    // Optional tags don't have enforced_for in AWS format
+    awsPolicy.tags[tag.name] = tagConfig;
+  }
+
+  return awsPolicy;
+}
+
+/**
+ * Check if the policy has features that won't be preserved in AWS format
+ */
+export function getAwsExportWarnings(policy: Policy): string[] {
+  const warnings: string[] = [];
+
+  const tagsWithRegex = policy.required_tags.filter(t => t.validation_regex);
+  if (tagsWithRegex.length > 0) {
+    const tagNames = tagsWithRegex.map(t => t.name).join(', ');
+    warnings.push(`Regex validation will be lost for: ${tagNames}. AWS Tag Policies don't support regex patterns.`);
+  }
+
+  return warnings;
 }

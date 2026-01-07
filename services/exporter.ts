@@ -1,4 +1,5 @@
 import { Policy } from '../types';
+import { convertMcpToAwsPolicy } from './converter';
 
 export const generateMarkdown = (policy: Policy): string => {
   const lines: string[] = [];
@@ -96,6 +97,17 @@ export const downloadJson = (policy: Policy, filename: string = 'tagging_policy.
 export const downloadMarkdown = (policy: Policy, filename: string = 'tagging_policy.md') => {
   const markdown = generateMarkdown(policy);
   const dataStr = "data:text/markdown;charset=utf-8," + encodeURIComponent(markdown);
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute("href", dataStr);
+  downloadAnchorNode.setAttribute("download", filename);
+  document.body.appendChild(downloadAnchorNode);
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+};
+
+export const downloadAwsPolicy = (policy: Policy, filename: string = 'aws_tag_policy.json') => {
+  const awsPolicy = convertMcpToAwsPolicy(policy);
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(awsPolicy, null, 2));
   const downloadAnchorNode = document.createElement('a');
   downloadAnchorNode.setAttribute("href", dataStr);
   downloadAnchorNode.setAttribute("download", filename);
