@@ -191,7 +191,7 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
                                 setRegexTestResult(null);
                             }}
                           />
-                          <Button variant="ghost" size="sm" onClick={testRegex} className="text-chartreuse hover:text-white">Run</Button>
+                          <Button variant="ghost" size="sm" onClick={testRegex} className={`text-chartreuse font-semibold ${isDark ? 'hover:text-white' : 'hover:text-charcoal'}`}>Run</Button>
                           {regexTestResult === true && <CheckCircle size={16} className="text-chartreuse"/>}
                           {regexTestResult === false && <AlertCircle size={16} className="text-red-500"/>}
                       </div>
