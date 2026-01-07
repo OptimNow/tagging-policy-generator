@@ -57,6 +57,8 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     description: '10-20% of typical spend',
     resources: [
       's3:bucket',
+      'elasticfilesystem:file-system',
+      'fsx:file-system',
     ]
   },
   {

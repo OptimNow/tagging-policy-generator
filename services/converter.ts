@@ -205,6 +205,12 @@ function convertToReportRequiredFormat(resourceTypes: string[]): string[] {
     // S3 mappings
     's3:bucket': 's3:bucket',
     
+    // EFS mappings
+    'elasticfilesystem:file-system': 'elasticfilesystem:file-system',
+    
+    // FSx mappings
+    'fsx:file-system': 'fsx:file-system',
+    
     // Lambda mappings
     'lambda:function': 'lambda:function',
     
