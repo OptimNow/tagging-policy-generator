@@ -210,7 +210,7 @@ const App: React.FC = () => {
       <div className={`min-h-screen flex flex-col p-6 ${isDark ? 'bg-charcoal text-white' : 'bg-light-grey text-charcoal'}`}>
 
         {/* Top Bar with Logo and Theme Toggle */}
-        <div className="max-w-4xl w-full mx-auto flex items-center justify-between mb-8">
+        <div className="max-w-5xl w-full mx-auto flex items-center justify-between mb-8">
           <a href="https://www.optimnow.io" target="_blank" rel="noopener noreferrer">
             <img
               src={isDark ? "/Images/logo-darkbackground.png" : "/Images/logo.png"}

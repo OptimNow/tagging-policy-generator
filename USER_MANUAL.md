@@ -2,6 +2,8 @@
 
 Welcome to the FinOps Tagging Policy Generator. This guide will walk you through everything you need to know to create effective tagging policies for cloud cost attribution.
 
+**Live App:** [tagpolgenerator.optimnow.io](http://tagpolgenerator.optimnow.io/)
+
 ---
 
 ## What is this tool?
@@ -118,17 +120,19 @@ Use the Download button to save your work as JSON or Markdown. To continue editi
 
 ## Supported Resource Types
 
-The generator currently supports these AWS resource types for the "Applies To" configuration:
+The generator supports 24+ AWS resource types organized by FinOps spend impact:
 
-| Service | Resource Types |
-|---------|----------------|
-| EC2     | `ec2:instance`, `ec2:volume`, `ec2:snapshot` |
-| RDS     | `rds:db` |
-| S3      | `s3:bucket` |
-| Lambda  | `lambda:function` |
-| ECS     | `ecs:service`, `ecs:task` |
+| Category | Resource Types |
+|----------|----------------|
+| **Compute** (40-60% of spend) | `ec2:instance`, `ec2:volume`, `ec2:snapshot`, `lambda:function`, `ecs:service`, `ecs:task`, `eks:cluster`, `eks:nodegroup` |
+| **Storage** (10-20% of spend) | `s3:bucket`, `efs:file-system`, `fsx:file-system` |
+| **Database** (15-25% of spend) | `rds:db`, `rds:cluster`, `dynamodb:table`, `elasticache:cluster`, `redshift:cluster`, `opensearch:domain` |
+| **AI/ML** | `sagemaker:endpoint`, `sagemaker:notebook-instance`, `bedrock:provisioned-model-throughput` |
+| **Networking** | `elasticloadbalancing:loadbalancer`, `ec2:natgateway` |
+| **Analytics** | `kinesis:stream`, `glue:job` |
+| **All Other Resources** | Use the "All Other Resources" option to apply tags to services not explicitly listed |
 
-These resources typically represent the bulk of AWS spend for most organizations. If you need additional resource types, contributions are welcome on GitHub.
+The "Apply to All" checkbox selects all categories including "All Other Resources" for comprehensive coverage.
 
 ---
 

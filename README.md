@@ -1,10 +1,10 @@
 <div align="center">
-  
-# FinOps Tagging Policy Generator 
+
+# FinOps Tagging Policy Generator
 
 **A visual tool for FinOps practitioners to create tagging policies that enable accurate cloud cost attribution.**
 
-[Try It Out](#getting-started) · [User Guide](#how-to-use-the-policy-builder) · [Examples](./examples/)
+[**Try the Live App**](http://tagpolgenerator.optimnow.io/) · [User Guide](#how-to-use-the-policy-builder) · [Examples](./examples/)
 
 </div>
 
@@ -63,41 +63,42 @@ A typical cost attribution policy looks like this:
 }
 ```
 
-## Prerequisites
-
-You'll need **Node.js** installed on your machine. Version 18 or later is recommended, though earlier versions may work. That's it—no database, no cloud credentials, no external services.
-
-To check your Node version:
-```bash
-node --version
-```
-
 ## Getting Started
 
-Clone the repository and install dependencies:
+### Use the Live App (Recommended)
+
+The easiest way to use this tool is via the hosted version:
+
+**[tagpolgenerator.optimnow.io](http://tagpolgenerator.optimnow.io/)**
+
+No installation required. Just open the link and start building your tagging policy.
+
+### Run Locally (For Development)
+
+If you want to customize the tool or run it locally:
+
+**Prerequisites:** Node.js v18 or later
 
 ```bash
+# Clone and install
 git clone https://github.com/OptimNow/tagging-policy-generator.git
 cd tagging-policy-generator
 npm install
-```
 
-Start the development server:
-
-```bash
+# Start development server
 npm run dev
 ```
 
-Open your browser to `http://localhost:3000` and you're ready to go.
+Open your browser to `http://localhost:5173` and you're ready to go.
 
-For production deployments, build the optimized version:
+For production builds:
 
 ```bash
 npm run build
 npm run preview  # Test the production build locally
 ```
 
-The `dist/` folder contains static files you can deploy to any web server, CDN, or hosting platform like Vercel, Netlify, or GitHub Pages.
+The `dist/` folder contains static files you can deploy to any web server, CDN, or hosting platform.
 
 ## How to Use the Policy Builder
 
@@ -240,13 +241,18 @@ The complete policy structure:
 
 ## Supported Resource Types
 
-| Service | Resource Types |
-|---------|----------------|
-| EC2     | `ec2:instance`, `ec2:volume`, `ec2:snapshot` |
-| RDS     | `rds:db` |
-| S3      | `s3:bucket` |
-| Lambda  | `lambda:function` |
-| ECS     | `ecs:service`, `ecs:task` |
+The tool supports 24+ AWS resource types organized by FinOps spend categories:
+
+| Category | Resource Types |
+|----------|----------------|
+| **Compute** | `ec2:instance`, `ec2:volume`, `ec2:snapshot`, `lambda:function`, `ecs:service`, `ecs:task`, `eks:cluster`, `eks:nodegroup` |
+| **Storage** | `s3:bucket`, `efs:file-system`, `fsx:file-system` |
+| **Database** | `rds:db`, `rds:cluster`, `dynamodb:table`, `elasticache:cluster`, `redshift:cluster`, `opensearch:domain` |
+| **AI/ML** | `sagemaker:endpoint`, `sagemaker:notebook-instance`, `bedrock:provisioned-model-throughput` |
+| **Networking** | `elasticloadbalancing:loadbalancer`, `ec2:natgateway` |
+| **Analytics** | `kinesis:stream`, `glue:job` |
+
+Plus an **"All Other Resources"** option for comprehensive coverage of unlisted services.
 
 ## Security and Privacy
 

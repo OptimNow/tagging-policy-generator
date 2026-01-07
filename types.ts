@@ -97,5 +97,8 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
   },
 ];
 
+// Special marker for "all other resources" not explicitly listed
+export const OTHER_RESOURCES_MARKER = '*:*';
+
 // Flat list of all resource types (derived from categories)
 export const AWS_RESOURCE_TYPES = RESOURCE_CATEGORIES.flatMap(cat => cat.resources);
