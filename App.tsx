@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Policy, RequiredTag, OptionalTag } from './types';
 import { TEMPLATES } from './services/templates';
 import { validatePolicy } from './services/validator';
 import { convertAwsPolicyToMcp } from './services/converter';
+import { downloadJson, downloadMarkdown } from './services/exporter';
 import { Button } from './components/Button';
 import { Input, Checkbox } from './components/Input';
 import { TagForm } from './components/TagForm';
 import { useTheme } from './context/ThemeContext';
-import { FileJson, Plus, Download, Copy, LayoutTemplate, ArrowRight, AlertTriangle, Check, Terminal, CheckCircle, Sun, Moon } from 'lucide-react';
+import { Plus, Download, Copy, LayoutTemplate, ArrowRight, AlertTriangle, Check, Terminal, CheckCircle, Sun, Moon, ChevronDown } from 'lucide-react';
 
 const INITIAL_POLICY: Policy = {
   version: "1.0",
@@ -32,8 +33,21 @@ const App: React.FC = () => {
   const [importError, setImportError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
 
   const isDark = theme === 'dark';
+
+  // Close download menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (downloadMenuRef.current && !downloadMenuRef.current.contains(event.target as Node)) {
+        setShowDownloadMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Update validation whenever policy changes
   useEffect(() => {
@@ -132,14 +146,14 @@ const App: React.FC = () => {
   };
 
   // Export
-  const downloadJson = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(policy, null, 2));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "tagging_policy.json");
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
+  const handleDownloadJson = () => {
+    downloadJson(policy);
+    setShowDownloadMenu(false);
+  };
+
+  const handleDownloadMarkdown = () => {
+    downloadMarkdown(policy);
+    setShowDownloadMenu(false);
   };
 
   const copyToClipboard = () => {
@@ -156,11 +170,13 @@ const App: React.FC = () => {
 
         {/* Top Bar with Logo and Theme Toggle */}
         <div className="max-w-4xl w-full mx-auto flex items-center justify-between mb-8">
-          <img
-            src={isDark ? "/Images/logo-darkbackground.png" : "/Images/logo.png"}
-            alt="OptimNow Logo"
-            className="h-8"
-          />
+          <a href="https://www.optimnow.io" target="_blank" rel="noopener noreferrer">
+            <img
+              src={isDark ? "./Images/logo-darkbackground.png" : "./Images/logo.png"}
+              alt="OptimNow Logo"
+              className="h-8"
+            />
+          </a>
           <button
             onClick={toggleTheme}
             className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10 text-gray-400 hover:text-white' : 'hover:bg-charcoal/10 text-gray-600 hover:text-charcoal'}`}
@@ -175,7 +191,7 @@ const App: React.FC = () => {
 
             {/* Header Section */}
             <div className="md:col-span-2 text-center mb-8">
-              <h1 className="text-3xl md:text-4xl font-bold mb-4">AWS Tagging Policy Generator</h1>
+              <h1 className="text-3xl md:text-4xl font-bold mb-4">Tagging Policy Generator</h1>
               <p className={`max-w-lg mx-auto ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                 Create, validate, and export standard FinOps tagging policies for your AWS infrastructure.
                 Pure client-side, secure, and ready for MCP.
@@ -261,13 +277,19 @@ const App: React.FC = () => {
         {/* Header */}
         <div className={`h-16 px-6 flex items-center justify-between shrink-0 ${isDark ? 'border-b border-white/10 bg-charcoal' : 'border-b border-gray-200 bg-white'}`}>
           <div className="flex items-center gap-3">
-             <div onClick={() => setView('start')} className={`cursor-pointer p-2 rounded-full transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}>
+             <a
+               href="https://www.optimnow.io"
+               target="_blank"
+               rel="noopener noreferrer"
+               onClick={(e) => { e.preventDefault(); setView('start'); }}
+               className={`cursor-pointer p-2 rounded-full transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}
+             >
                <img
-                 src={isDark ? "/Images/logo-darkbackground.png" : "/Images/logo.png"}
+                 src={isDark ? "./Images/logo-darkbackground.png" : "./Images/logo.png"}
                  alt="OptimNow Logo"
                  className="h-6"
                />
-             </div>
+             </a>
              <h1 className={`font-bold text-lg hidden sm:block ${isDark ? 'text-white' : 'text-charcoal'}`}>Policy Builder</h1>
           </div>
           <div className="flex items-center gap-2">
@@ -383,9 +405,31 @@ const App: React.FC = () => {
                {copied ? <Check size={14} className="mr-1 text-green-600"/> : <Copy size={14} className="mr-1"/>}
                {copied ? "Copied" : "Copy"}
             </Button>
-            <Button size="sm" onClick={downloadJson} disabled={validationErrors.length > 0}>
-               <Download size={14} className="mr-1"/> Download
-            </Button>
+            <div className="relative" ref={downloadMenuRef}>
+              <Button
+                size="sm"
+                onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+                disabled={validationErrors.length > 0}
+              >
+                <Download size={14} className="mr-1"/> Download <ChevronDown size={14} className="ml-1"/>
+              </Button>
+              {showDownloadMenu && (
+                <div className={`absolute right-0 top-full mt-1 py-1 rounded-lg shadow-lg z-10 min-w-[140px] ${isDark ? 'bg-[#2a2a2a] border border-white/10' : 'bg-white border border-gray-200'}`}>
+                  <button
+                    onClick={handleDownloadJson}
+                    className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}
+                  >
+                    JSON
+                  </button>
+                  <button
+                    onClick={handleDownloadMarkdown}
+                    className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}
+                  >
+                    Markdown
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
