@@ -172,9 +172,9 @@ const App: React.FC = () => {
         <div className="max-w-4xl w-full mx-auto flex items-center justify-between mb-8">
           <a href="https://www.optimnow.io" target="_blank" rel="noopener noreferrer">
             <img
-              src={isDark ? "./Images/logo-darkbackground.png" : "./Images/logo.png"}
+              src={isDark ? "/Images/logo-darkbackground.png" : "/Images/logo.png"}
               alt="OptimNow Logo"
-              className="h-8"
+              className="h-10"
             />
           </a>
           <button
@@ -285,9 +285,9 @@ const App: React.FC = () => {
                className={`cursor-pointer p-2 rounded-full transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}
              >
                <img
-                 src={isDark ? "./Images/logo-darkbackground.png" : "./Images/logo.png"}
+                 src={isDark ? "/Images/logo-darkbackground.png" : "/Images/logo.png"}
                  alt="OptimNow Logo"
-                 className="h-6"
+                 className="h-8"
                />
              </a>
              <h1 className={`font-bold text-lg hidden sm:block ${isDark ? 'text-white' : 'text-charcoal'}`}>Policy Builder</h1>
