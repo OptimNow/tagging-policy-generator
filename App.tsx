@@ -94,9 +94,11 @@ const App: React.FC = () => {
     const template = TEMPLATES.find(t => t.name === templateName);
     if (template) {
       setPolicy({
-        ...INITIAL_POLICY,
-        ...template.policy,
-        last_updated: new Date().toISOString()
+        version: INITIAL_POLICY.version,
+        last_updated: new Date().toISOString(),
+        required_tags: template.policy.required_tags ? [...template.policy.required_tags] : [],
+        optional_tags: template.policy.optional_tags ? [...template.policy.optional_tags] : [],
+        tag_naming_rules: { ...INITIAL_POLICY.tag_naming_rules }
       });
       setView('editor');
     }
@@ -291,7 +293,7 @@ const App: React.FC = () => {
                   Start with a blank canvas or use a template to build your policy step-by-step.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <Button onClick={() => setView('editor')} className="justify-between group">
+                  <Button onClick={() => { setPolicy({...INITIAL_POLICY, last_updated: new Date().toISOString()}); setView('editor'); }} className="justify-between group">
                     Start Blank <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform"/>
                   </Button>
                   <div className="flex flex-wrap gap-2">
