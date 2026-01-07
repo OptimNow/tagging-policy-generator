@@ -8,7 +8,10 @@
         "@@assign": ["Engineering", "Marketing", "Sales"]
       },
       "enforced_for": {
-        "@@assign": ["ec2:instance", "s3:bucket", "rds:db-instance"]
+        "@@assign": ["ec2:ALL_SUPPORTED", "s3:ALL_SUPPORTED", "rds:ALL_SUPPORTED"]
+      },
+      "report_required_tag_for": {
+        "@@assign": ["ec2:instance", "s3:bucket", "rds:db"]
       }
     },
     "Environment": {
@@ -19,7 +22,10 @@
         "@@assign": ["production", "staging", "development"]
       },
       "enforced_for": {
-        "@@assign": ["ec2:*", "rds:*"]
+        "@@assign": ["ec2:ALL_SUPPORTED", "rds:ALL_SUPPORTED"]
+      },
+      "report_required_tag_for": {
+        "@@assign": ["ec2:instance", "ec2:volume", "rds:db", "rds:cluster"]
       }
     },
     "Owner": {
@@ -27,7 +33,10 @@
         "@@assign": "Owner"
       },
       "enforced_for": {
-        "@@assign": [":ALL_SUPPORTED"]
+        "@@assign": ["ec2:ALL_SUPPORTED", "s3:ALL_SUPPORTED", "lambda:ALL_SUPPORTED"]
+      },
+      "report_required_tag_for": {
+        "@@assign": ["ec2:instance", "s3:bucket", "lambda:function"]
       }
     },
     "Project": {
