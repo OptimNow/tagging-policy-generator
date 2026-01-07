@@ -124,9 +124,9 @@ The generator supports 24+ AWS resource types organized by FinOps spend impact:
 
 | Category | Resource Types |
 |----------|----------------|
-| **Compute** (40-60% of spend) | `ec2:instance`, `ec2:volume`, `ec2:snapshot`, `lambda:function`, `ecs:service`, `ecs:task`, `eks:cluster`, `eks:nodegroup` |
-| **Storage** (10-20% of spend) | `s3:bucket`, `efs:file-system`, `fsx:file-system` |
-| **Database** (15-25% of spend) | `rds:db`, `rds:cluster`, `dynamodb:table`, `elasticache:cluster`, `redshift:cluster`, `opensearch:domain` |
+| **Compute** (40-60% of spend) | `ec2:instance`, `ec2:volume`, `ec2:snapshot`, `lambda:function`, `ecs:service`, `ecs:task-definition`, `eks:cluster`, `eks:nodegroup` |
+| **Storage** (10-20% of spend) | `s3:bucket`, `elasticfilesystem:file-system`, `fsx:file-system` |
+| **Database** (15-25% of spend) | `rds:db-instance`, `rds:cluster`, `dynamodb:table`, `elasticache:cluster`, `redshift:cluster`, `es:domain` |
 | **AI/ML** | `sagemaker:endpoint`, `sagemaker:notebook-instance`, `bedrock:provisioned-model-throughput` |
 | **Networking** | `elasticloadbalancing:loadbalancer`, `ec2:natgateway` |
 | **Analytics** | `kinesis:stream`, `glue:job` |

@@ -6,6 +6,7 @@ interface Template {
   policy: Partial<Policy>;
 }
 
+// Templates using AWS Tag Policy enforced_for resource type names
 export const TEMPLATES: Template[] = [
   {
     name: "Cost Allocation",
@@ -17,21 +18,21 @@ export const TEMPLATES: Template[] = [
           description: "Department for cost allocation",
           allowed_values: ["Engineering", "Marketing", "Sales", "Operations"],
           validation_regex: null,
-          applies_to: ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
+          applies_to: ["ec2:instance", "rds:db-instance", "s3:bucket", "lambda:function"]
         },
         {
           name: "Owner",
           description: "Email address of the resource owner",
           allowed_values: null,
           validation_regex: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
-          applies_to: ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
+          applies_to: ["ec2:instance", "rds:db-instance", "s3:bucket", "lambda:function"]
         },
         {
           name: "Environment",
           description: "Deployment environment",
           allowed_values: ["production", "staging", "development", "test"],
           validation_regex: null,
-          applies_to: ["ec2:instance", "rds:db", "lambda:function"]
+          applies_to: ["ec2:instance", "rds:db-instance", "lambda:function"]
         }
       ],
       optional_tags: [
@@ -53,21 +54,21 @@ export const TEMPLATES: Template[] = [
           description: "Deployment environment for the resource",
           allowed_values: ["production", "staging", "development"],
           validation_regex: null,
-          applies_to: ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
+          applies_to: ["ec2:instance", "rds:db-instance", "s3:bucket", "lambda:function"]
         },
         {
           name: "Owner",
           description: "Email address of the team or person responsible for this resource",
           allowed_values: null,
           validation_regex: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
-          applies_to: ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
+          applies_to: ["ec2:instance", "rds:db-instance", "s3:bucket", "lambda:function"]
         },
         {
           name: "Project",
           description: "Project or product name this resource belongs to",
           allowed_values: null,
           validation_regex: "^[a-z0-9-]+$",
-          applies_to: ["ec2:instance", "rds:db", "s3:bucket", "lambda:function", "ecs:service"]
+          applies_to: ["ec2:instance", "rds:db-instance", "s3:bucket", "lambda:function", "ecs:service"]
         }
       ],
       optional_tags: [
@@ -94,49 +95,49 @@ export const TEMPLATES: Template[] = [
           description: "Financial cost center code for chargeback and showback",
           allowed_values: null,
           validation_regex: "^CC-[0-9]{4,6}$",
-          applies_to: ["ec2:instance", "ec2:volume", "ec2:snapshot", "rds:db", "s3:bucket", "lambda:function", "ecs:service", "ecs:task"]
+          applies_to: ["ec2:instance", "ec2:volume", "ec2:snapshot", "rds:db-instance", "s3:bucket", "lambda:function", "ecs:service", "ecs:task-definition"]
         },
         {
           name: "Environment",
           description: "Deployment environment classification",
           allowed_values: ["production", "pre-production", "staging", "qa", "development", "sandbox", "disaster-recovery"],
           validation_regex: null,
-          applies_to: ["ec2:instance", "ec2:volume", "rds:db", "s3:bucket", "lambda:function", "ecs:service"]
+          applies_to: ["ec2:instance", "ec2:volume", "rds:db-instance", "s3:bucket", "lambda:function", "ecs:service"]
         },
         {
           name: "Owner",
           description: "Email address of the resource owner for accountability",
           allowed_values: null,
           validation_regex: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
-          applies_to: ["ec2:instance", "ec2:volume", "ec2:snapshot", "rds:db", "s3:bucket", "lambda:function", "ecs:service", "ecs:task"]
+          applies_to: ["ec2:instance", "ec2:volume", "ec2:snapshot", "rds:db-instance", "s3:bucket", "lambda:function", "ecs:service", "ecs:task-definition"]
         },
         {
           name: "Application",
           description: "Application or service identifier from the CMDB",
           allowed_values: null,
           validation_regex: "^APP-[A-Z0-9]{3,10}$",
-          applies_to: ["ec2:instance", "ec2:volume", "rds:db", "s3:bucket", "lambda:function", "ecs:service"]
+          applies_to: ["ec2:instance", "ec2:volume", "rds:db-instance", "s3:bucket", "lambda:function", "ecs:service"]
         },
         {
           name: "DataClassification",
           description: "Data sensitivity classification per corporate security policy",
           allowed_values: ["public", "internal", "confidential", "restricted", "highly-restricted"],
           validation_regex: null,
-          applies_to: ["s3:bucket", "rds:db", "ec2:volume", "ec2:snapshot"]
+          applies_to: ["s3:bucket", "rds:db-instance", "ec2:volume", "ec2:snapshot"]
         },
         {
           name: "Compliance",
           description: "Regulatory compliance requirements applicable to this resource",
           allowed_values: ["HIPAA", "PCI-DSS", "SOC2", "GDPR", "SOX", "FedRAMP", "HITRUST", "None"],
           validation_regex: null,
-          applies_to: ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
+          applies_to: ["ec2:instance", "rds:db-instance", "s3:bucket", "lambda:function"]
         },
         {
           name: "BusinessUnit",
           description: "Business unit or division that owns this resource",
           allowed_values: ["Engineering", "Finance", "Marketing", "Sales", "Operations", "HR", "Legal", "IT", "Security", "Product"],
           validation_regex: null,
-          applies_to: ["ec2:instance", "rds:db", "s3:bucket", "lambda:function", "ecs:service"]
+          applies_to: ["ec2:instance", "rds:db-instance", "s3:bucket", "lambda:function", "ecs:service"]
         }
       ],
       optional_tags: [
@@ -168,21 +169,21 @@ export const TEMPLATES: Template[] = [
           description: "Department for cost allocation",
           allowed_values: null,
           validation_regex: null,
-          applies_to: ["ec2:instance", "rds:db", "s3:bucket"]
+          applies_to: ["ec2:instance", "rds:db-instance", "s3:bucket"]
         },
         {
           name: "Owner",
           description: "Email address of the resource owner",
           allowed_values: null,
           validation_regex: null,
-          applies_to: ["ec2:instance", "rds:db", "s3:bucket"]
+          applies_to: ["ec2:instance", "rds:db-instance", "s3:bucket"]
         },
         {
           name: "Environment",
           description: "Deployment environment",
           allowed_values: ["production", "staging", "development"],
           validation_regex: null,
-          applies_to: ["ec2:instance", "rds:db"]
+          applies_to: ["ec2:instance", "rds:db-instance"]
         }
       ],
       optional_tags: []

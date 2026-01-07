@@ -36,21 +36,21 @@ A typical cost attribution policy looks like this:
       "description": "Financial cost center for chargeback",
       "allowed_values": null,
       "validation_regex": "^CC-[0-9]{4,6}$",
-      "applies_to": ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
+      "applies_to": ["ec2:instance", "rds:db-instance", "s3:bucket", "lambda:function"]
     },
     {
       "name": "Owner",
       "description": "Email of the team responsible for this spend",
       "allowed_values": null,
       "validation_regex": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
-      "applies_to": ["ec2:instance", "rds:db", "s3:bucket"]
+      "applies_to": ["ec2:instance", "rds:db-instance", "s3:bucket"]
     },
     {
       "name": "Environment",
       "description": "Deployment environment for cost segmentation",
       "allowed_values": ["production", "staging", "development"],
       "validation_regex": null,
-      "applies_to": ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
+      "applies_to": ["ec2:instance", "rds:db-instance", "s3:bucket", "lambda:function"]
     }
   ],
   "optional_tags": [...],
@@ -245,9 +245,9 @@ The tool supports 24+ AWS resource types organized by FinOps spend categories:
 
 | Category | Resource Types |
 |----------|----------------|
-| **Compute** | `ec2:instance`, `ec2:volume`, `ec2:snapshot`, `lambda:function`, `ecs:service`, `ecs:task`, `eks:cluster`, `eks:nodegroup` |
-| **Storage** | `s3:bucket`, `efs:file-system`, `fsx:file-system` |
-| **Database** | `rds:db`, `rds:cluster`, `dynamodb:table`, `elasticache:cluster`, `redshift:cluster`, `opensearch:domain` |
+| **Compute** | `ec2:instance`, `ec2:volume`, `ec2:snapshot`, `lambda:function`, `ecs:service`, `ecs:task-definition`, `eks:cluster`, `eks:nodegroup` |
+| **Storage** | `s3:bucket`, `elasticfilesystem:file-system`, `fsx:file-system` |
+| **Database** | `rds:db-instance`, `rds:cluster`, `dynamodb:table`, `elasticache:cluster`, `redshift:cluster`, `es:domain` |
 | **AI/ML** | `sagemaker:endpoint`, `sagemaker:notebook-instance`, `bedrock:provisioned-model-throughput` |
 | **Networking** | `elasticloadbalancing:loadbalancer`, `ec2:natgateway` |
 | **Analytics** | `kinesis:stream`, `glue:job` |

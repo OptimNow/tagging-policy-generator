@@ -34,6 +34,9 @@ export interface ResourceCategory {
   resources: string[];
 }
 
+// AWS Tag Policy enforced_for resource types
+// Format: service:resource-type (using AWS's actual resource type names)
+// Reference: https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_supported-resources-enforcement.html
 export const RESOURCE_CATEGORIES: ResourceCategory[] = [
   {
     name: 'Compute',
@@ -44,7 +47,7 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
       'ec2:snapshot',
       'lambda:function',
       'ecs:service',
-      'ecs:task',
+      'ecs:task-definition',
       'eks:cluster',
       'eks:nodegroup',
     ]
@@ -54,7 +57,7 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     description: '10-20% of typical spend',
     resources: [
       's3:bucket',
-      'efs:file-system',
+      'elasticfilesystem:file-system',
       'fsx:file-system',
     ]
   },
@@ -62,12 +65,12 @@ export const RESOURCE_CATEGORIES: ResourceCategory[] = [
     name: 'Database',
     description: '15-25% of typical spend',
     resources: [
-      'rds:db',
+      'rds:db-instance',
       'rds:cluster',
       'dynamodb:table',
       'elasticache:cluster',
       'redshift:cluster',
-      'opensearch:domain',
+      'es:domain',
     ]
   },
   {

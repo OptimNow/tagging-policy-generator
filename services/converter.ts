@@ -18,9 +18,9 @@ export function convertAwsPolicyToMcp(awsPolicyString: string): Policy {
     const allowedValues = config.tag_value?.['@@assign'] || null;
     const enforcedFor = config.enforced_for?.['@@assign'] || [];
     
-    const appliesTo = enforcedFor.length > 0 
+    const appliesTo = enforcedFor.length > 0
       ? parseEnforcedFor(enforcedFor)
-      : ['ec2:instance', 'rds:db', 's3:bucket', 'lambda:function']; // Default fallback if needed, though strictly AWS policies with no enforcement might just be tag policies without resource linkage.
+      : ['ec2:instance', 'rds:db-instance', 's3:bucket', 'lambda:function']; // Default fallback
     
     const description = `Converted from AWS Organizations tag policy - ${key}`;
 
@@ -57,24 +57,28 @@ export function convertAwsPolicyToMcp(awsPolicyString: string): Policy {
 
 function parseEnforcedFor(enforcedFor: string[]): string[] {
   const appliesTo: string[] = [];
+  // Map AWS service wildcards to specific resource types
+  // Using AWS's actual enforced_for resource type names
   const serviceMap: Record<string, string[]> = {
     // Compute
     'ec2': ['ec2:instance', 'ec2:volume', 'ec2:snapshot', 'ec2:natgateway'],
     'lambda': ['lambda:function'],
-    'ecs': ['ecs:service', 'ecs:task'],
+    'ecs': ['ecs:service', 'ecs:task-definition'],
     'eks': ['eks:cluster', 'eks:nodegroup'],
 
     // Storage
     's3': ['s3:bucket'],
-    'efs': ['efs:file-system'],
+    'elasticfilesystem': ['elasticfilesystem:file-system'],
+    'efs': ['elasticfilesystem:file-system'], // alias
     'fsx': ['fsx:file-system'],
 
     // Database
-    'rds': ['rds:db', 'rds:cluster'],
+    'rds': ['rds:db-instance', 'rds:cluster'],
     'dynamodb': ['dynamodb:table'],
     'elasticache': ['elasticache:cluster'],
     'redshift': ['redshift:cluster'],
-    'opensearch': ['opensearch:domain'],
+    'es': ['es:domain'],
+    'opensearch': ['es:domain'], // alias - OpenSearch uses es: prefix in tag policies
 
     // AI/ML
     'sagemaker': ['sagemaker:endpoint', 'sagemaker:notebook-instance'],

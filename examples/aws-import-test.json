@@ -8,7 +8,7 @@
         "@@assign": ["Engineering", "Marketing", "Sales"]
       },
       "enforced_for": {
-        "@@assign": ["ec2:instance", "s3:bucket", "rds:db"]
+        "@@assign": ["ec2:instance", "s3:bucket", "rds:db-instance"]
       }
     },
     "Environment": {
