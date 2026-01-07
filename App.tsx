@@ -316,10 +316,12 @@ const App: React.FC = () => {
 
             {/* Option 2: Import from AWS Policy */}
             <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
-              <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mb-4">
-                <Upload className="text-blue-400" />
+              <div className="flex items-start gap-4 mb-4">
+                <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                  <Upload className="text-blue-400" />
+                </div>
+                <h2 className="text-xl font-bold">Import AWS Policy</h2>
               </div>
-              <h2 className="text-xl font-bold mb-2">Import from AWS Policy</h2>
               <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                 Paste an AWS Organizations tag policy to convert it to our format.
               </p>
@@ -341,10 +343,12 @@ const App: React.FC = () => {
 
             {/* Option 3: Export to AWS Policy */}
             <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
-              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
-                <Download className="text-green-400" />
+              <div className="flex items-start gap-4 mb-4">
+                <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0">
+                  <Download className="text-green-400" />
+                </div>
+                <h2 className="text-xl font-bold">Export to AWS Policy</h2>
               </div>
-              <h2 className="text-xl font-bold mb-2">Export to AWS Policy</h2>
               <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                 Paste a policy JSON to convert it to AWS Organizations format.
               </p>

@@ -137,7 +137,6 @@ const SERVICES_WITH_ENFORCEMENT_SUPPORT = new Set([
   'rds',
   'eks',
   'ecs',
-  'elasticloadbalancing',
   'acm',
   'appmesh',
   'backup',
@@ -145,6 +144,7 @@ const SERVICES_WITH_ENFORCEMENT_SUPPORT = new Set([
   'batch',
   'auditmanager',
   'elasticfilesystem',
+  // Note: elasticloadbalancing does NOT support enforcement mode, only reporting
   // Add more as AWS adds support
 ]);
 
