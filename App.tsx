@@ -8,7 +8,7 @@ import { Button } from './components/Button';
 import { Input, Checkbox } from './components/Input';
 import { TagForm } from './components/TagForm';
 import { useTheme } from './context/ThemeContext';
-import { Plus, Download, Copy, LayoutTemplate, ArrowRight, AlertTriangle, Check, Terminal, CheckCircle, Sun, Moon, ChevronDown } from 'lucide-react';
+import { Plus, Download, Copy, LayoutTemplate, ArrowRight, AlertTriangle, Check, Terminal, CheckCircle, Sun, Moon, ChevronDown, BookOpen } from 'lucide-react';
 
 const INITIAL_POLICY: Policy = {
   version: "1.0",
@@ -174,16 +174,27 @@ const App: React.FC = () => {
             <img
               src={isDark ? "/Images/logo-darkbackground.png" : "/Images/logo.png"}
               alt="OptimNow Logo"
-              className="h-10"
+              className="h-8"
             />
           </a>
-          <button
-            onClick={toggleTheme}
-            className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10 text-gray-400 hover:text-white' : 'hover:bg-charcoal/10 text-gray-600 hover:text-charcoal'}`}
-            aria-label="Toggle theme"
-          >
-            {isDark ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
+          <div className="flex items-center gap-2">
+            <a
+              href="https://github.com/OptimNow/tagging-policy-generator/blob/main/USER_MANUAL.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${isDark ? 'hover:bg-white/10 text-gray-400 hover:text-white' : 'hover:bg-charcoal/10 text-gray-600 hover:text-charcoal'}`}
+            >
+              <BookOpen size={16} />
+              <span className="hidden sm:inline">User Manual</span>
+            </a>
+            <button
+              onClick={toggleTheme}
+              className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10 text-gray-400 hover:text-white' : 'hover:bg-charcoal/10 text-gray-600 hover:text-charcoal'}`}
+              aria-label="Toggle theme"
+            >
+              {isDark ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 flex items-center justify-center">
@@ -287,7 +298,7 @@ const App: React.FC = () => {
                <img
                  src={isDark ? "/Images/logo-darkbackground.png" : "/Images/logo.png"}
                  alt="OptimNow Logo"
-                 className="h-8"
+                 className="h-6"
                />
              </a>
              <h1 className={`font-bold text-lg hidden sm:block ${isDark ? 'text-white' : 'text-charcoal'}`}>Policy Builder</h1>
