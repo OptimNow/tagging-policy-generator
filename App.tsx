@@ -2,13 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Policy, RequiredTag, OptionalTag } from './types';
 import { TEMPLATES } from './services/templates';
 import { validatePolicy } from './services/validator';
-import { convertAwsPolicyToMcp, getAwsExportWarnings } from './services/converter';
+import { convertAwsPolicyToMcp, convertMcpToAwsPolicy, getAwsExportWarnings } from './services/converter';
 import { downloadJson, downloadMarkdown, downloadAwsPolicy } from './services/exporter';
 import { Button } from './components/Button';
 import { Input, Checkbox } from './components/Input';
 import { TagForm } from './components/TagForm';
 import { useTheme } from './context/ThemeContext';
-import { Plus, Download, Copy, LayoutTemplate, ArrowRight, AlertTriangle, Check, Terminal, CheckCircle, Sun, Moon, ChevronDown, BookOpen } from 'lucide-react';
+import { Plus, Download, Upload, Copy, LayoutTemplate, ArrowRight, AlertTriangle, Check, Terminal, CheckCircle, Sun, Moon, ChevronDown, BookOpen } from 'lucide-react';
 
 const INITIAL_POLICY: Policy = {
   version: "1.0",
@@ -30,7 +30,10 @@ const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('start');
   const [policy, setPolicy] = useState<Policy>(INITIAL_POLICY);
   const [awsImportText, setAwsImportText] = useState('');
+  const [awsExportText, setAwsExportText] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportSuccess, setExportSuccess] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
@@ -85,6 +88,32 @@ const App: React.FC = () => {
       } else {
         setImportError("Unknown error occurred during import");
       }
+    }
+  };
+
+  // Handle Export (convert pasted JSON policy to AWS format)
+  const handleExportConvert = () => {
+    try {
+      const parsed = JSON.parse(awsExportText);
+      // Check if it has the expected structure
+      if (!parsed.required_tags && !parsed.optional_tags) {
+        throw new Error("Invalid policy format. Expected required_tags or optional_tags.");
+      }
+      const awsPolicy = convertMcpToAwsPolicy(parsed as Policy);
+      const awsJson = JSON.stringify(awsPolicy, null, 2);
+
+      // Copy to clipboard
+      navigator.clipboard.writeText(awsJson);
+      setExportError(null);
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 3000);
+    } catch (e) {
+      if (e instanceof Error) {
+        setExportError(e.message);
+      } else {
+        setExportError("Unknown error occurred during export");
+      }
+      setExportSuccess(false);
     }
   };
 
@@ -209,11 +238,11 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex-1 flex items-center justify-center">
-          <div className="max-w-4xl w-full grid md:grid-cols-2 gap-8">
+        <div className="flex-1 flex items-center justify-center py-8">
+          <div className="max-w-5xl w-full space-y-8">
 
             {/* Header Section */}
-            <div className="md:col-span-2 text-center mb-8">
+            <div className="text-center mb-8">
               <h1 className="text-3xl md:text-4xl font-bold mb-4">FinOps Tagging Policy Generator</h1>
               <p className={`max-w-lg mx-auto ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                 Create, validate, and export tagging policies for cloud cost attribution.
@@ -221,66 +250,98 @@ const App: React.FC = () => {
               </p>
             </div>
 
-          {/* Option 1: Create New */}
-          <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col items-start ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
-            <div className="w-12 h-12 rounded-full bg-chartreuse/10 flex items-center justify-center mb-4">
-              <Plus className="text-chartreuse" />
-            </div>
-            <h2 className="text-xl font-bold mb-2">Create from Scratch</h2>
-            <p className={`text-sm mb-8 flex-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              Start with a blank canvas or use a template to build your policy step-by-step.
-            </p>
-
-            <div className="w-full space-y-3">
-              <Button onClick={() => setView('editor')} className="w-full justify-between group">
-                Start Blank <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
-              </Button>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className={`w-full border-t ${isDark ? 'border-white/10' : 'border-gray-200'}`}></div>
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className={`px-2 text-gray-500 rounded ${isDark ? 'bg-[#333333]' : 'bg-white'}`}>Or pick a template</span>
+          {/* Option 1: Create New - Full Width */}
+          <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
+            <div className="flex flex-col md:flex-row md:items-start gap-6">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 rounded-full bg-chartreuse/10 flex items-center justify-center">
+                  <Plus className="text-chartreuse" />
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-2">
-                 {TEMPLATES.map(t => (
-                   <button
-                    key={t.name}
-                    onClick={() => applyTemplate(t.name)}
-                    className={`flex items-center gap-2 p-3 rounded text-sm text-left transition-colors border border-transparent ${isDark ? 'bg-white/5 hover:bg-white/10 hover:border-white/20' : 'bg-gray-50 hover:bg-gray-100 hover:border-gray-300'}`}
-                   >
-                     <LayoutTemplate size={14} className="text-gray-400" />
-                     <span className="flex-1">{t.name}</span>
-                   </button>
-                 ))}
+              <div className="flex-1">
+                <h2 className="text-xl font-bold mb-2">Create from Scratch</h2>
+                <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Start with a blank canvas or use a template to build your policy step-by-step.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Button onClick={() => setView('editor')} className="justify-between group">
+                    Start Blank <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform"/>
+                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    {TEMPLATES.map(t => (
+                      <button
+                        key={t.name}
+                        onClick={() => applyTemplate(t.name)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded text-sm transition-colors border ${isDark ? 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20' : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'}`}
+                      >
+                        <LayoutTemplate size={14} className="text-gray-400" />
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Option 2: Import */}
-          <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col items-start ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
-            <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mb-4">
-              <Terminal className="text-blue-400" />
-            </div>
-            <h2 className="text-xl font-bold mb-2">Import AWS Policy</h2>
-            <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              Paste an existing AWS Organizations JSON policy to convert it automatically.
-            </p>
-            <textarea
-              className={`w-full flex-1 rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
-              placeholder='{"tags": { ... }}'
-              value={awsImportText}
-              onChange={(e) => setAwsImportText(e.target.value)}
-            />
-            {importError && (
-              <div className="w-full p-2 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs flex items-center gap-2">
-                <AlertTriangle size={12} /> {importError}
+          {/* Import/Export Row */}
+          <div className="grid md:grid-cols-2 gap-8">
+
+            {/* Option 2: Import from AWS Policy */}
+            <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
+              <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mb-4">
+                <Upload className="text-blue-400" />
               </div>
-            )}
-            <Button variant="secondary" onClick={handleImport} className="w-full" disabled={!awsImportText.trim()}>
-              Import & Convert
-            </Button>
+              <h2 className="text-xl font-bold mb-2">Import from AWS Policy</h2>
+              <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                Paste an AWS Organizations tag policy to convert it to our format.
+              </p>
+              <textarea
+                className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
+                placeholder='{"tags": { "CostCenter": { ... } }}'
+                value={awsImportText}
+                onChange={(e) => setAwsImportText(e.target.value)}
+              />
+              {importError && (
+                <div className="w-full p-2 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs flex items-center gap-2">
+                  <AlertTriangle size={12} /> {importError}
+                </div>
+              )}
+              <Button variant="secondary" onClick={handleImport} className="w-full" disabled={!awsImportText.trim()}>
+                <Upload size={14} className="mr-2" /> Import & Edit
+              </Button>
+            </div>
+
+            {/* Option 3: Export to AWS Policy */}
+            <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
+              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
+                <Download className="text-green-400" />
+              </div>
+              <h2 className="text-xl font-bold mb-2">Export to AWS Policy</h2>
+              <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                Paste a policy JSON to convert it to AWS Organizations format.
+              </p>
+              <textarea
+                className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
+                placeholder='{"version": "1.0", "required_tags": [...] }'
+                value={awsExportText}
+                onChange={(e) => setAwsExportText(e.target.value)}
+              />
+              {exportError && (
+                <div className="w-full p-2 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs flex items-center gap-2">
+                  <AlertTriangle size={12} /> {exportError}
+                </div>
+              )}
+              {exportSuccess && (
+                <div className="w-full p-2 mb-4 bg-green-500/10 border border-green-500/20 rounded text-green-400 text-xs flex items-center gap-2">
+                  <CheckCircle size={12} /> AWS policy copied to clipboard!
+                </div>
+              )}
+              <Button variant="secondary" onClick={handleExportConvert} className="w-full" disabled={!awsExportText.trim()}>
+                <Download size={14} className="mr-2" /> Convert & Copy
+              </Button>
+            </div>
+
           </div>
 
           </div>
