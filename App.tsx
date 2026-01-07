@@ -316,18 +316,17 @@ const App: React.FC = () => {
 
             {/* Option 2: Import from AWS Policy */}
             <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
-              <div className="flex items-start gap-4 mb-2">
+              <div className="flex items-start gap-4 mb-4">
                 <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
                   <Upload className="text-blue-400" />
                 </div>
                 <div className="flex-1">
-                  <h2 className="text-xl font-bold mb-1">Import AWS Policy</h2>
-                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <h2 className="text-xl font-bold">Import AWS Policy</h2>
+                  <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                     Paste an AWS Organizations tag policy to convert it to our format.
                   </p>
                 </div>
               </div>
-              <div className="mb-4"></div>
               <textarea
                 className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
                 placeholder='{"tags": { "CostCenter": { ... } }}'
@@ -346,18 +345,17 @@ const App: React.FC = () => {
 
             {/* Option 3: Export to AWS Policy */}
             <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
-              <div className="flex items-start gap-4 mb-2">
+              <div className="flex items-start gap-4 mb-4">
                 <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0">
                   <Download className="text-green-400" />
                 </div>
                 <div className="flex-1">
-                  <h2 className="text-xl font-bold mb-1">Export to AWS Policy</h2>
-                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <h2 className="text-xl font-bold">Export to AWS Policy</h2>
+                  <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                     Paste a policy JSON to convert it to AWS Organizations format.
                   </p>
                 </div>
               </div>
-              <div className="mb-4"></div>
               <textarea
                 className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
                 placeholder='{"version": "1.0", "required_tags": [...] }'
