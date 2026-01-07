@@ -546,7 +546,7 @@ const App: React.FC = () => {
                     onClick={handleDownloadJson}
                     className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}
                   >
-                    JSON
+                    JSON Tag Policy
                   </button>
                   <button
                     onClick={handleDownloadAwsPolicy}
