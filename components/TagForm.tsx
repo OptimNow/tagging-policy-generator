@@ -259,7 +259,7 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
                             {category.resources.map(resource => (
                               <Checkbox
                                 key={resource}
-                                label={resource.split(':')[1]}
+                                label={resource}
                                 checked={(tag as RequiredTag).applies_to.includes(resource)}
                                 onChange={() => handleAppliesToChange(resource)}
                               />

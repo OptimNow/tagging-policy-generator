@@ -27,7 +27,7 @@ type ViewState = 'start' | 'editor';
 
 const App: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
-  const [view, setView] = useState<ViewState>('start');
+  const [view, setViewState] = useState<ViewState>('start');
   const [policy, setPolicy] = useState<Policy>(INITIAL_POLICY);
   const [awsImportText, setAwsImportText] = useState('');
   const [awsExportText, setAwsExportText] = useState('');
@@ -40,6 +40,33 @@ const App: React.FC = () => {
   const downloadMenuRef = useRef<HTMLDivElement>(null);
 
   const isDark = theme === 'dark';
+
+  // Wrapper for setView that also updates browser history
+  const setView = (newView: ViewState, pushHistory = true) => {
+    setViewState(newView);
+    if (pushHistory) {
+      window.history.pushState({ view: newView }, '', newView === 'editor' ? '#editor' : '#');
+    }
+  };
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state?.view) {
+        setViewState(event.state.view);
+      } else {
+        // Default to start if no state (e.g., initial load or direct navigation)
+        const hash = window.location.hash;
+        setViewState(hash === '#editor' ? 'editor' : 'start');
+      }
+    };
+
+    // Set initial state
+    window.history.replaceState({ view: 'start' }, '', '#');
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Close download menu when clicking outside
   useEffect(() => {
@@ -361,19 +388,17 @@ const App: React.FC = () => {
         {/* Header */}
         <div className={`h-16 px-6 flex items-center justify-between shrink-0 ${isDark ? 'border-b border-white/10 bg-charcoal' : 'border-b border-gray-200 bg-white'}`}>
           <div className="flex items-center gap-3">
-             <a
-               href="https://www.optimnow.io"
-               target="_blank"
-               rel="noopener noreferrer"
-               onClick={(e) => { e.preventDefault(); setView('start'); }}
+             <button
+               onClick={() => setView('start')}
                className={`cursor-pointer p-2 rounded-full transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}
+               aria-label="Back to home"
              >
                <img
                  src={isDark ? "/Images/logo-darkbackground.png" : "/Images/logo.png"}
                  alt="OptimNow Logo"
                  className="h-6"
                />
-             </a>
+             </button>
              <h1 className={`font-bold text-lg hidden sm:block ${isDark ? 'text-white' : 'text-charcoal'}`}>Policy Builder</h1>
           </div>
           <div className="flex items-center gap-2">
