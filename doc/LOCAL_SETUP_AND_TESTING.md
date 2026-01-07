@@ -1,8 +1,8 @@
-# UAT Execution Guide
+# Local Setup and Testing Guide
 
-## AWS Tagging Policy Generator V1 - User Acceptance Testing
+## AWS Tagging Policy Generator V1
 
-This guide provides step-by-step instructions for executing User Acceptance Testing on the AWS Tagging Policy Generator.
+This guide provides step-by-step instructions for setting up the application locally and running basic tests.
 
 ---
 
