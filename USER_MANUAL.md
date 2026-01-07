@@ -70,9 +70,11 @@ As your tagging maturity improves, you might graduate optional tags to required 
 
 ## Export Options
 
-When your policy is ready, the Download button offers two formats:
+When your policy is ready, the Download button offers three formats:
 
 **JSON** exports the raw policy file. This format works with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp) and integrates with other automation tools. The JSON structure is straightforward enough that you can parse it with any scripting language.
+
+**AWS Tag Policy** exports a policy ready to paste directly into AWS Organizations. We do the heavy lifting for you: the generator automatically converts your resource selections into the correct AWS syntax, handles the differences between `enforced_for` and `report_required_tag_for`, and filters out services that don't support enforcement. No need to memorize AWS's quirky tag policy rules.
 
 **Markdown** generates a human-readable document you can share with teams, include in wikis, or add to onboarding documentation. It's a great way to communicate tagging requirements without asking everyone to read JSON.
 

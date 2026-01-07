@@ -153,3 +153,94 @@ In practice, teams divide responsibilities:
 - **Platform or cloud engineering teams** implement and operate auto-tagging and remediation workflows
 
 Clear ownership ensures tagging standards evolve with the organization’s needs and remain aligned with financial goals without introducing unnecessary bottlenecks.
+
+
+
+---
+
+## Appendix: Why AWS Tag Policy JSON is tricky
+
+If you've ever tried to write an AWS Tag Policy by hand, you've probably discovered that the JSON format is surprisingly complex. This appendix explains why, and how the FinOps Tagging Policy Generator handles these complexities for you.
+
+### The problem: Tag Policies don't follow IaC conventions
+
+When you work with Infrastructure as Code (CloudFormation, Terraform, CDK), resource types follow a consistent pattern. You specify `AWS::EC2::Instance` or `aws_instance` and the tool knows exactly what you mean.
+
+AWS Tag Policies use a completely different syntax. Instead of CloudFormation resource types, they use their own resource type format like `ec2:instance`, `rds:db`, or `s3:bucket`. And the rules for what goes where are not intuitive.
+
+### Two different fields, two different rules
+
+AWS Tag Policies have two key fields for specifying which resources a tag applies to:
+
+**`enforced_for`** - Prevents noncompliant tagging operations
+- Only accepts `service:ALL_SUPPORTED` format (e.g., `rds:ALL_SUPPORTED`)
+- Does NOT accept specific resource types like `rds:db`
+- Only works for services that have "Enforcement Mode" enabled
+
+**`report_required_tag_for`** - Drives compliance reporting
+- Accepts specific resource types (e.g., `rds:db`, `ec2:instance`)
+- Works for any resource type that supports "Reporting Mode"
+
+This means you can't just list `rds:db` in `enforced_for` and expect it to work. AWS will reject the policy or silently ignore it.
+
+### Not all services support enforcement
+
+Here's where it gets even trickier. Not every AWS service supports tag enforcement. AWS maintains a table of supported resource types with columns for:
+
+- Reporting Mode (compliance visibility)
+- Enforcement Mode (prevent noncompliant tagging)
+- IaC Reporting (CloudFormation/Terraform visibility)
+- IaC Enforcement (prevent noncompliant IaC deployments)
+
+Many services support Reporting but NOT Enforcement. For example:
+- `sagemaker:endpoint` - Reporting: Yes, Enforcement: No
+- `bedrock:agent` - Reporting: Yes, Enforcement: No
+- `kinesis:stream` - Reporting: Yes, Enforcement: No
+- `glue:job` - Reporting: Yes, Enforcement: No
+
+If you include these in `enforced_for`, AWS will reject your policy.
+
+### The official reference
+
+AWS publishes the full list of supported resource types and their capabilities:
+https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_supported-resources-enforcement.html
+
+This table is essential reading if you're writing Tag Policies by hand. But it's also 1600+ lines of data that changes as AWS adds support for new services.
+
+### How the generator handles this
+
+The FinOps Tagging Policy Generator automatically:
+
+1. **Converts resource types to the correct format** - When you select `rds:db`, the generator knows to use `rds:ALL_SUPPORTED` in `enforced_for` and `rds:db` in `report_required_tag_for`
+
+2. **Filters out unsupported services** - Services like SageMaker, Bedrock, Kinesis, and Glue are excluded from `enforced_for` because they don't support enforcement mode
+
+3. **Includes all resources in compliance reporting** - Even services without enforcement support are included in `report_required_tag_for` so you get visibility into compliance
+
+4. **Keeps the mapping up to date** - As AWS adds enforcement support for new services, we update the generator
+
+### Example transformation
+
+When you create a policy with resources `['ec2:instance', 'rds:db', 'sagemaker:endpoint']`, the generator produces:
+
+```json
+{
+  "tags": {
+    "CostCenter": {
+      "tag_key": { "@@assign": "CostCenter" },
+      "enforced_for": { 
+        "@@assign": ["ec2:ALL_SUPPORTED", "rds:ALL_SUPPORTED"] 
+      },
+      "report_required_tag_for": { 
+        "@@assign": ["ec2:instance", "rds:db", "sagemaker:endpoint"] 
+      }
+    }
+  }
+}
+```
+
+Notice that `sagemaker` is excluded from `enforced_for` (no enforcement support) but included in `report_required_tag_for` (reporting works fine).
+
+### Bottom line
+
+AWS Tag Policy JSON is complex because it evolved separately from IaC tooling and has different rules for different capabilities. The generator abstracts this complexity so you can focus on what matters: defining which tags your organization needs for cost attribution.

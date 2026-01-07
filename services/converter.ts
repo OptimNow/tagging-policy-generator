@@ -115,12 +115,156 @@ interface AwsTagPolicy {
       tag_key: { '@@assign': string };
       tag_value?: { '@@assign': string[] };
       enforced_for?: { '@@assign': string[] };
+      report_required_tag_for?: { '@@assign': string[] };
     };
   };
 }
 
 /**
+ * Services that support enforced_for with ALL_SUPPORTED syntax.
+ * Only these services can be used in the enforced_for field.
+ * Reference: https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_supported-resources-enforcement.html
+ * 
+ * A service is included here only if its ALL_SUPPORTED entry has "Enforcement Mode: Yes"
+ */
+const SERVICES_WITH_ENFORCEMENT_SUPPORT = new Set([
+  'ec2',
+  's3', 
+  'lambda',
+  'dynamodb',
+  'elasticache',
+  'redshift',
+  'rds',
+  'eks',
+  'ecs',
+  'elasticloadbalancing',
+  'acm',
+  'appmesh',
+  'backup',
+  'backup-gateway',
+  'batch',
+  'auditmanager',
+  'elasticfilesystem',
+  // Add more as AWS adds support
+]);
+
+/**
+ * Convert specific resource types to AWS service:ALL_SUPPORTED format for enforced_for.
+ * AWS enforced_for only accepts service:ALL_SUPPORTED syntax, not specific resource types.
+ * Only includes services that actually support enforcement.
+ * 
+ * Example: ['ec2:instance', 'rds:db', 'sagemaker:endpoint'] 
+ *       -> ['ec2:ALL_SUPPORTED', 'rds:ALL_SUPPORTED'] (sagemaker excluded - no enforcement support)
+ */
+function convertToEnforcedForFormat(resourceTypes: string[]): string[] {
+  const services = new Set<string>();
+  
+  for (const resource of resourceTypes) {
+    // Extract service name from resource type (e.g., 'ec2:instance' -> 'ec2')
+    const colonIndex = resource.indexOf(':');
+    if (colonIndex > 0) {
+      const service = resource.substring(0, colonIndex);
+      // Only include services that support enforcement
+      if (SERVICES_WITH_ENFORCEMENT_SUPPORT.has(service)) {
+        services.add(service);
+      }
+    }
+  }
+  
+  // Convert to service:ALL_SUPPORTED format
+  return Array.from(services).map(service => `${service}:ALL_SUPPORTED`);
+}
+
+/**
+ * Convert resource types to valid report_required_tag_for format.
+ * Filters out invalid resource types that AWS doesn't recognize.
+ * 
+ * AWS only accepts specific resource type formats in report_required_tag_for.
+ * Some resource types from our app may not be valid AWS tag policy resource types.
+ */
+function convertToReportRequiredFormat(resourceTypes: string[]): string[] {
+  // Map our internal resource types to valid AWS tag policy resource types
+  const resourceTypeMapping: Record<string, string> = {
+    // RDS mappings - AWS uses 'rds:db' not 'rds:db-instance'
+    'rds:db-instance': 'rds:db',
+    'rds:db': 'rds:db',
+    'rds:cluster': 'rds:cluster',
+    
+    // EKS mappings
+    'eks:cluster': 'eks:cluster',
+    'eks:nodegroup': 'eks:nodegroup',
+    
+    // EC2 mappings
+    'ec2:instance': 'ec2:instance',
+    'ec2:volume': 'ec2:volume',
+    'ec2:natgateway': 'ec2:natgateway',
+    'ec2:vpc': 'ec2:vpc',
+    'ec2:subnet': 'ec2:subnet',
+    'ec2:security-group': 'ec2:security-group',
+    
+    // S3 mappings
+    's3:bucket': 's3:bucket',
+    
+    // Lambda mappings
+    'lambda:function': 'lambda:function',
+    
+    // ECS mappings
+    'ecs:service': 'ecs:service',
+    'ecs:cluster': 'ecs:cluster',
+    'ecs:task-definition': 'ecs:task-definition',
+    
+    // DynamoDB mappings
+    'dynamodb:table': 'dynamodb:table',
+    
+    // ElastiCache mappings
+    'elasticache:cluster': 'elasticache:cluster',
+    
+    // Redshift mappings
+    'redshift:cluster': 'redshift:cluster',
+    
+    // ELB mappings
+    'elasticloadbalancing:loadbalancer': 'elasticloadbalancing:loadbalancer',
+    'elasticloadbalancing:targetgroup': 'elasticloadbalancing:targetgroup',
+    
+    // Glue mappings
+    'glue:job': 'glue:job',
+    
+    // Kinesis mappings
+    'kinesis:stream': 'kinesis:stream',
+    
+    // SageMaker mappings
+    'sagemaker:endpoint': 'sagemaker:endpoint',
+    'sagemaker:notebook-instance': 'sagemaker:notebook-instance',
+    
+    // Bedrock mappings - these may not be supported in tag policies yet
+    'bedrock:agent': 'bedrock:agent',
+    'bedrock:knowledge-base': 'bedrock:knowledge-base',
+  };
+  
+  const validResourceTypes: string[] = [];
+  
+  for (const resource of resourceTypes) {
+    const mapped = resourceTypeMapping[resource];
+    if (mapped) {
+      validResourceTypes.push(mapped);
+    } else {
+      // If not in mapping, try to use as-is (AWS may accept it)
+      validResourceTypes.push(resource);
+    }
+  }
+  
+  return [...new Set(validResourceTypes)]; // Remove duplicates
+}
+
+/**
  * Convert our policy format to AWS Organizations Tag Policy format.
+ *
+ * AWS Tag Policy rules:
+ * - enforced_for: Only accepts service:ALL_SUPPORTED format (e.g., 'rds:ALL_SUPPORTED')
+ *   This prevents noncompliant tagging operations for the specified services.
+ *   Only services with "Enforcement Mode: Yes" can be used here.
+ * - report_required_tag_for: Accepts specific resource types (e.g., 'rds:db')
+ *   This drives compliance reporting for the specified resource types.
  *
  * Note: AWS Tag Policies do not support regex validation, so validation_regex
  * fields will be ignored in the export. Only allowed_values will be converted.
@@ -128,7 +272,7 @@ interface AwsTagPolicy {
 export function convertMcpToAwsPolicy(policy: Policy): AwsTagPolicy {
   const awsPolicy: AwsTagPolicy = { tags: {} };
 
-  // Process required tags (these have enforced_for)
+  // Process required tags
   for (const tag of policy.required_tags) {
     const tagConfig: AwsTagPolicy['tags'][string] = {
       tag_key: { '@@assign': tag.name }
@@ -139,15 +283,25 @@ export function convertMcpToAwsPolicy(policy: Policy): AwsTagPolicy {
       tagConfig.tag_value = { '@@assign': tag.allowed_values };
     }
 
-    // Add enforced_for if applies_to is specified
+    // Convert applies_to to proper AWS format
     if (tag.applies_to && tag.applies_to.length > 0) {
-      tagConfig.enforced_for = { '@@assign': tag.applies_to };
+      // enforced_for: Use service:ALL_SUPPORTED format for services that support enforcement
+      const enforcedForServices = convertToEnforcedForFormat(tag.applies_to);
+      if (enforcedForServices.length > 0) {
+        tagConfig.enforced_for = { '@@assign': enforcedForServices };
+      }
+      
+      // report_required_tag_for: Use specific resource types for compliance reporting
+      const reportRequiredFor = convertToReportRequiredFormat(tag.applies_to);
+      if (reportRequiredFor.length > 0) {
+        tagConfig.report_required_tag_for = { '@@assign': reportRequiredFor };
+      }
     }
 
     awsPolicy.tags[tag.name] = tagConfig;
   }
 
-  // Process optional tags (no enforced_for)
+  // Process optional tags (no enforced_for or report_required_tag_for)
   for (const tag of policy.optional_tags) {
     const tagConfig: AwsTagPolicy['tags'][string] = {
       tag_key: { '@@assign': tag.name }
