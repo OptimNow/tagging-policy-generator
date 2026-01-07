@@ -4,28 +4,45 @@
       "tag_key": {
         "@@assign": "CostCenter"
       },
-      "tag_value": {
-        "@@assign": ["Engineering", "Marketing", "Sales", "Operations", "Finance"]
-      },
       "enforced_for": {
-        "@@assign": ["ec2:ALL_SUPPORTED", "rds:ALL_SUPPORTED", "s3:ALL_SUPPORTED"]
+        "@@assign": [
+          "ec2:ALL_SUPPORTED",
+          "lambda:ALL_SUPPORTED",
+          "ecs:ALL_SUPPORTED",
+          "eks:ALL_SUPPORTED",
+          "s3:ALL_SUPPORTED",
+          "rds:ALL_SUPPORTED",
+          "dynamodb:ALL_SUPPORTED",
+          "elasticache:ALL_SUPPORTED",
+          "redshift:ALL_SUPPORTED"
+        ]
       },
       "report_required_tag_for": {
-        "@@assign": ["ec2:instance", "ec2:volume", "rds:db", "rds:cluster", "s3:bucket", "lambda:function"]
-      }
-    },
-    "Environment": {
-      "tag_key": {
-        "@@assign": "Environment"
-      },
-      "tag_value": {
-        "@@assign": ["production", "staging", "development", "test"]
-      },
-      "enforced_for": {
-        "@@assign": ["ec2:ALL_SUPPORTED", "rds:ALL_SUPPORTED", "lambda:ALL_SUPPORTED"]
-      },
-      "report_required_tag_for": {
-        "@@assign": ["ec2:instance", "rds:db", "lambda:function"]
+        "@@assign": [
+          "ec2:instance",
+          "ec2:volume",
+          "lambda:function",
+          "ecs:service",
+          "ecs:cluster",
+          "ecs:task-definition",
+          "eks:cluster",
+          "eks:nodegroup",
+          "s3:bucket",
+          "rds:db",
+          "dynamodb:table",
+          "elasticache:cluster",
+          "redshift:cluster",
+          "sagemaker:endpoint",
+          "sagemaker:notebook-instance",
+          "elasticloadbalancing:loadbalancer",
+          "elasticloadbalancing:targetgroup",
+          "ec2:natgateway",
+          "ec2:vpc",
+          "ec2:subnet",
+          "ec2:security-group",
+          "kinesis:stream",
+          "glue:job"
+        ]
       }
     },
     "Owner": {
@@ -33,10 +50,42 @@
         "@@assign": "Owner"
       },
       "enforced_for": {
-        "@@assign": ["ec2:ALL_SUPPORTED", "rds:ALL_SUPPORTED", "s3:ALL_SUPPORTED"]
+        "@@assign": [
+          "ec2:ALL_SUPPORTED",
+          "rds:ALL_SUPPORTED",
+          "s3:ALL_SUPPORTED"
+        ]
       },
       "report_required_tag_for": {
-        "@@assign": ["ec2:instance", "ec2:volume", "rds:db", "s3:bucket"]
+        "@@assign": [
+          "ec2:instance",
+          "rds:db",
+          "s3:bucket"
+        ]
+      }
+    },
+    "Environment": {
+      "tag_key": {
+        "@@assign": "Environment"
+      },
+      "tag_value": {
+        "@@assign": [
+          "production",
+          "staging",
+          "development"
+        ]
+      },
+      "enforced_for": {
+        "@@assign": [
+          "ec2:ALL_SUPPORTED",
+          "rds:ALL_SUPPORTED"
+        ]
+      },
+      "report_required_tag_for": {
+        "@@assign": [
+          "ec2:instance",
+          "rds:db"
+        ]
       }
     },
     "Project": {
@@ -44,7 +93,12 @@
         "@@assign": "Project"
       },
       "tag_value": {
-        "@@assign": ["alpha", "beta", "gamma", "delta", "omega"]
+        "@@assign": [
+          "alpha",
+          "beta",
+          "gamma",
+          "delta"
+        ]
       }
     },
     "DataClassification": {
@@ -52,13 +106,24 @@
         "@@assign": "DataClassification"
       },
       "tag_value": {
-        "@@assign": ["public", "internal", "confidential", "restricted"]
+        "@@assign": [
+          "public",
+          "internal",
+          "confidential",
+          "restricted"
+        ]
       },
       "enforced_for": {
-        "@@assign": ["s3:ALL_SUPPORTED", "rds:ALL_SUPPORTED"]
+        "@@assign": [
+          "s3:ALL_SUPPORTED",
+          "rds:ALL_SUPPORTED"
+        ]
       },
       "report_required_tag_for": {
-        "@@assign": ["s3:bucket", "rds:db"]
+        "@@assign": [
+          "s3:bucket",
+          "rds:db"
+        ]
       }
     }
   }

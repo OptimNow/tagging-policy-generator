@@ -4,14 +4,27 @@
       "tag_key": {
         "@@assign": "CostCenter"
       },
-      "tag_value": {
-        "@@assign": ["Engineering", "Marketing", "Sales"]
-      },
       "enforced_for": {
-        "@@assign": ["ec2:ALL_SUPPORTED", "s3:ALL_SUPPORTED", "rds:ALL_SUPPORTED"]
+        "@@assign": [
+          "ec2:ALL_SUPPORTED",
+          "lambda:ALL_SUPPORTED",
+          "s3:ALL_SUPPORTED",
+          "rds:ALL_SUPPORTED",
+          "dynamodb:ALL_SUPPORTED"
+        ]
       },
       "report_required_tag_for": {
-        "@@assign": ["ec2:instance", "s3:bucket", "rds:db"]
+        "@@assign": [
+          "ec2:instance",
+          "ec2:volume",
+          "lambda:function",
+          "s3:bucket",
+          "rds:db",
+          "dynamodb:table",
+          "sagemaker:endpoint",
+          "elasticloadbalancing:loadbalancer",
+          "kinesis:stream"
+        ]
       }
     },
     "Environment": {
@@ -19,13 +32,23 @@
         "@@assign": "Environment"
       },
       "tag_value": {
-        "@@assign": ["production", "staging", "development"]
+        "@@assign": [
+          "production",
+          "staging",
+          "development"
+        ]
       },
       "enforced_for": {
-        "@@assign": ["ec2:ALL_SUPPORTED", "rds:ALL_SUPPORTED"]
+        "@@assign": [
+          "ec2:ALL_SUPPORTED",
+          "rds:ALL_SUPPORTED"
+        ]
       },
       "report_required_tag_for": {
-        "@@assign": ["ec2:instance", "ec2:volume", "rds:db", "rds:cluster"]
+        "@@assign": [
+          "ec2:instance",
+          "rds:db"
+        ]
       }
     },
     "Owner": {
@@ -33,10 +56,18 @@
         "@@assign": "Owner"
       },
       "enforced_for": {
-        "@@assign": ["ec2:ALL_SUPPORTED", "s3:ALL_SUPPORTED", "lambda:ALL_SUPPORTED"]
+        "@@assign": [
+          "ec2:ALL_SUPPORTED",
+          "s3:ALL_SUPPORTED",
+          "lambda:ALL_SUPPORTED"
+        ]
       },
       "report_required_tag_for": {
-        "@@assign": ["ec2:instance", "s3:bucket", "lambda:function"]
+        "@@assign": [
+          "ec2:instance",
+          "s3:bucket",
+          "lambda:function"
+        ]
       }
     },
     "Project": {
@@ -44,17 +75,16 @@
         "@@assign": "Project"
       },
       "tag_value": {
-        "@@assign": ["alpha", "beta", "gamma"]
+        "@@assign": [
+          "alpha",
+          "beta",
+          "gamma"
+        ]
       }
     },
     "Team": {
       "tag_key": {
         "@@assign": "Team"
-      }
-    },
-    "Description": {
-      "tag_key": {
-        "@@assign": "Description"
       }
     }
   }
