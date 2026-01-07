@@ -191,9 +191,9 @@ const App: React.FC = () => {
 
             {/* Header Section */}
             <div className="md:col-span-2 text-center mb-8">
-              <h1 className="text-3xl md:text-4xl font-bold mb-4">Tagging Policy Generator</h1>
+              <h1 className="text-3xl md:text-4xl font-bold mb-4">FinOps Tagging Policy Generator</h1>
               <p className={`max-w-lg mx-auto ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                Create, validate, and export standard FinOps tagging policies for your AWS infrastructure.
+                Create, validate, and export tagging policies for cloud cost attribution.
                 Pure client-side, secure, and ready for MCP.
               </p>
             </div>

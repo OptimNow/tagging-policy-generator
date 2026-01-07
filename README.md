@@ -1,9 +1,9 @@
 <div align="center">
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 
-# AWS Tagging Policy Generator
+# FinOps Tagging Policy Generator
 
-**A visual tool for FinOps teams to create, validate, and export standardized AWS tagging policies.**
+**A visual tool for FinOps practitioners to create tagging policies that enable accurate cloud cost attribution.**
 
 [Try It Out](#getting-started) · [User Guide](#how-to-use-the-policy-builder) · [Examples](./examples/)
 
@@ -11,17 +11,21 @@
 
 ---
 
-If you've ever inherited an AWS account with resources named `test-server-2-final-FINAL` and no idea who created it or what it costs, you understand why tagging policies matter. This tool helps you build those policies without wrestling with raw JSON or memorizing AWS schema formats.
+## Why This Tool Exists
+
+Cloud cost management starts with knowing who's spending what. Without consistent tagging, your cost reports are filled with "unallocated" spend, and finance teams can't charge back to the right departments. Engineering can't identify which services are driving costs. Nobody can answer "how much does Project X actually cost us?"
+
+This tool helps you define tagging policies that solve that problem. It's laser-focused on FinOps use cases: cost centers, ownership, environments, business units, and the other tags that make showback and chargeback possible. While tags can serve many purposes (security classification, operations automation, compliance), this generator is designed specifically for the tags that enable cost attribution.
 
 The generator runs entirely in your browser—no data leaves your machine, no API keys required, no backend to maintain. Just open it up and start building.
 
 ## What This Tool Does
 
-The AWS Tagging Policy Generator creates JSON policy files that define your organization's tagging standards. These policies specify which tags are required on which resources, what values are acceptable, and how tag names should be formatted.
+The FinOps Tagging Policy Generator creates JSON policy files that define your organization's cost attribution tags. These policies specify which tags are required on which resources, what values are acceptable, and how tag names should be formatted.
 
 The output is designed to work with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp), but the JSON format is straightforward enough to integrate with any compliance checking system you might be using.
 
-A typical policy you'll generate looks like this:
+A typical cost attribution policy looks like this:
 
 ```json
 {
@@ -29,18 +33,25 @@ A typical policy you'll generate looks like this:
   "last_updated": "2025-01-04T12:00:00Z",
   "required_tags": [
     {
-      "name": "Environment",
-      "description": "Deployment environment for the resource",
-      "allowed_values": ["production", "staging", "development"],
-      "validation_regex": null,
+      "name": "CostCenter",
+      "description": "Financial cost center for chargeback",
+      "allowed_values": null,
+      "validation_regex": "^CC-[0-9]{4,6}$",
       "applies_to": ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
     },
     {
       "name": "Owner",
-      "description": "Email of the person responsible for this resource",
+      "description": "Email of the team responsible for this spend",
       "allowed_values": null,
       "validation_regex": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
       "applies_to": ["ec2:instance", "rds:db", "s3:bucket"]
+    },
+    {
+      "name": "Environment",
+      "description": "Deployment environment for cost segmentation",
+      "allowed_values": ["production", "staging", "development"],
+      "validation_regex": null,
+      "applies_to": ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
     }
   ],
   "optional_tags": [...],
@@ -95,104 +106,94 @@ The `dist/` folder contains static files you can deploy to any web server, CDN, 
 
 When you first open the app, you'll see two paths forward:
 
-**Create from Scratch** lets you start with a blank policy or pick from one of the built-in templates. The templates are designed for common scenarios:
+**Create from Scratch** lets you start with a blank policy or pick from one of the built-in templates. The templates are designed for common FinOps scenarios:
 
-- **Cost Allocation** includes CostCenter, Owner, and Environment tags—the essentials for tracking who's spending what
-- **Security & Compliance** adds DataClassification, Compliance framework tags, and Owner for audit trails
-- **Minimal Starter** provides a lightweight starting point you can build on
+- **Cost Allocation** includes CostCenter, Owner, and Environment—the foundational tags for any chargeback or showback program
+- **Security & Compliance** adds DataClassification and compliance framework tags (useful when security requirements overlap with cost governance)
+- **Minimal Starter** provides a lightweight starting point for organizations just beginning their FinOps journey
 
-**Import AWS Policy** takes an existing AWS Organizations tag policy (the JSON format you'd get from the AWS console) and converts it into the generator's format. Paste your policy JSON into the text area and click Import & Convert. This is handy when you're migrating from AWS-native policies or want to use an existing policy as a starting point.
+**Import AWS Policy** takes an existing AWS Organizations tag policy and converts it into the generator's format. This is useful when you're evolving from basic AWS-native enforcement to a more sophisticated FinOps tagging strategy.
 
 ### The Policy Builder Interface
 
-Once you're in the editor, you'll see a split-screen layout. The left side is where you build your policy; the right side shows a live JSON preview that updates as you make changes.
+The editor uses a split-screen layout. The left side is where you build your policy; the right side shows a live JSON preview that updates as you make changes.
 
 #### Global Naming Rules
 
-At the top, you'll find settings that apply to all tags in your policy:
+At the top, you'll find settings that apply to all tags:
 
-- **Case Sensitive** determines whether `Environment` and `environment` are treated as the same tag
+- **Case Sensitive** determines whether `CostCenter` and `costcenter` are treated as the same tag
 - **Allow Special Characters** controls whether tag names can include characters beyond letters, numbers, and standard separators
-- **Max Key Length** and **Max Value Length** set upper bounds for tag names and values (AWS defaults are 128 and 256 respectively)
+- **Max Key Length** and **Max Value Length** set upper bounds for tag names and values (AWS defaults are 128 and 256)
 
 #### Required Tags
 
-These are the tags that must be present on resources for compliance. For each required tag, you can configure:
+These are the tags that must be present on resources for cost attribution to work. For each required tag, you configure:
 
-**Name** is the tag key as it will appear on AWS resources. Keep it concise but descriptive—`CostCenter` rather than `cost_center_code`.
+**Name** is the tag key as it will appear on AWS resources. Stick with established conventions when possible—`CostCenter` is more recognizable than `cost_allocation_code`.
 
-**Description** explains what this tag is for and helps team members understand how to use it. Good descriptions reduce confusion and support tickets.
+**Description** explains what this tag is for. Good descriptions help engineers understand why they need to tag resources and what values to use. "Financial cost center code from SAP for department-level chargeback" is better than "Cost center".
 
-**Allowed Values** restricts what values are acceptable. You can leave this blank to allow any value, or provide a comma-separated list like `production, staging, development`. When you specify allowed values, any other value will fail validation.
+**Allowed Values** restricts what values are acceptable. For Environment tags, you might specify `production, staging, development`. For CostCenter, you'd typically leave this blank and use a regex pattern instead, since cost center codes follow a format but the actual values come from your finance system.
 
-**Validation Regex** offers more flexible validation when a simple list won't do. Use this for patterns like email addresses (`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`) or cost center codes (`^CC-[0-9]{4,6}$`). The regex is tested in real-time so you can verify it works before exporting.
+**Validation Regex** offers pattern-based validation. Cost center codes often follow patterns like `CC-[0-9]{4,6}` or `FIN-[A-Z]{2}-[0-9]{3}`. Owner emails can be validated with standard email patterns. The regex is tested in real-time so you can verify it works before exporting.
 
-**Applies To** specifies which AWS resource types this tag is required on. Check the boxes for the resource types you want to enforce. Available options include:
-- EC2 instances, volumes, and snapshots
-- RDS databases
-- S3 buckets
-- Lambda functions
-- ECS services and tasks
-
-This granularity lets you require `DataClassification` on S3 buckets and RDS databases (where sensitive data lives) without forcing it onto every EC2 instance.
+**Applies To** specifies which AWS resource types require this tag. The most important resources for cost attribution are typically EC2 instances, RDS databases, and S3 buckets—these usually represent the bulk of your AWS spend.
 
 #### Optional Tags
 
-These work the same as required tags, minus the resource type selection. Optional tags are recommendations rather than requirements—they'll appear in your policy documentation but won't trigger compliance failures when missing.
+Optional tags are recommendations rather than requirements. Use these for tags that would be nice to have but aren't essential for your core cost attribution needs. Project codes, team names, or application identifiers often fall into this category when you're just starting out.
 
-Use optional tags for things you'd like people to add but won't block deployments over, like `Project` codes or `MaintenanceWindow` preferences.
+### Export Options
 
-### Validation and Export
+The Download button offers two formats:
 
-The right panel does more than show your JSON—it validates your policy in real-time. Look for the status bar at the bottom:
-
-A green "Policy Valid" message means everything checks out. You can download the JSON file or copy it to your clipboard using the buttons in the toolbar.
-
-Red validation errors tell you what needs fixing before you can export. Common issues include:
-- Tags with no name
-- Invalid regex patterns that won't compile
-- Required tags with no resource types selected
-
-Fix the issues in the left panel and watch the errors disappear.
+- **JSON** exports the raw policy file for use with the FinOps Tag Compliance MCP Server or other automation tools
+- **Markdown** generates a human-readable document you can share with teams or include in documentation
 
 ### Saving and Loading Policies
 
-The **Download** button saves your policy as `tagging_policy.json`. To load a previously saved policy, use the Import function on the start screen—paste the JSON contents and import it back into the editor.
+Policies are not saved automatically or stored anywhere. This is intentional: your tagging strategy is yours, and nothing is transmitted to external servers. Use the Download button to save your work, and the Import function to load it back later.
 
-Policies are not saved automatically or stored anywhere. This is intentional: your tagging strategy is yours, and nothing is transmitted to external servers.
+## Common FinOps Tagging Patterns
 
-## Working with AWS Organizations Policies
+### The Minimum Viable Tagging Policy
 
-If your organization already uses AWS Organizations tag policies, you can convert them to this tool's format for editing. The AWS policy format looks different—it uses constructs like `@@assign` to define values and enforcement:
+If you're just starting with FinOps, focus on three tags:
 
-```json
-{
-  "tags": {
-    "CostCenter": {
-      "tag_key": { "@@assign": "CostCenter" },
-      "tag_value": { "@@assign": ["Engineering", "Marketing", "Sales"] },
-      "enforced_for": { "@@assign": ["ec2:*", "rds:*", "s3:*"] }
-    }
-  }
-}
-```
+1. **CostCenter** or **BusinessUnit** - Who pays for this resource?
+2. **Owner** - Who can answer questions about this resource?
+3. **Environment** - Is this production spend or development experimentation?
 
-The import function parses this format and maps it to the generator's structure:
-- Tags with `enforced_for` become required tags
-- Tags without enforcement become optional tags
-- Wildcards like `ec2:*` are expanded to specific resource types
+These three tags enable basic chargeback, let you identify orphaned resources, and help you separate production costs from non-production.
 
-After importing, you can modify the policy freely and export the updated version.
+### Scaling Up
+
+As your FinOps practice matures, consider adding:
+
+- **Application** or **Service** - Which product or service does this support?
+- **Project** - For organizations that track project-based spending
+- **Team** - When multiple teams share cost centers
+
+### What Not to Include
+
+This tool is focused on cost attribution. While you might be tempted to add tags for:
+
+- Security classification (DataClassification, Compliance)
+- Operations (MaintenanceWindow, BackupSchedule)
+- Automation (AutoShutdown, Terraform-managed)
+
+Consider whether these truly need to be in your FinOps tagging policy or whether they belong in separate policies managed by security or operations teams. Keeping your cost attribution policy focused makes it easier to achieve compliance.
 
 ## Example Policies
 
-The `examples/` folder contains sample policies for different organizational needs:
+The `examples/` folder contains sample policies:
 
-**startup-policy.json** is a lightweight policy for smaller organizations. It requires just three tags (Environment, Owner, Project) and suggests two optional ones. Perfect for teams that need basic cost tracking without bureaucratic overhead.
+**startup-policy.json** is a lightweight policy for smaller organizations. Three required tags (Environment, Owner, Project) and two optional ones. Perfect for teams that need cost visibility without bureaucratic overhead.
 
-**enterprise-policy.json** is comprehensive. Seven required tags covering cost centers, environments, ownership, applications, data classification, compliance frameworks, and business units. Six optional tags for projects, support tiers, backup schedules, and more. Use this as a reference for building out enterprise-grade tagging strategies.
+**enterprise-policy.json** is comprehensive. Seven required tags covering cost centers, environments, ownership, applications, data classification, compliance, and business units. Use this as a reference for building enterprise-grade tagging strategies.
 
-**aws-policy-example.json** demonstrates the AWS Organizations format, useful for testing the import feature.
+**aws-policy-example.json** demonstrates the AWS Organizations tag policy format, useful for testing the import feature.
 
 ## Policy Schema Reference
 
@@ -252,8 +253,6 @@ The complete policy structure:
 
 This tool is 100% client-side. Your policies never leave your browser. There are no analytics, no tracking, no external API calls. The only network requests are loading the application itself.
 
-This design was intentional—tagging policies often reflect organizational structure and compliance requirements. That information should stay with you.
-
 ## Contributing
 
 Found a bug? Have a feature request? Open an issue on GitHub. Pull requests are welcome for bug fixes, new templates, or additional resource type support.
@@ -266,6 +265,6 @@ MIT License. See [LICENSE](./LICENSE) for details.
 
 <div align="center">
 
-Built for FinOps teams who believe in tagging before it's too late.
+Built by [OptimNow](https://www.optimnow.io) for FinOps practitioners who know that good cost attribution starts with good tagging.
 
 </div>
