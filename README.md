@@ -1,5 +1,6 @@
 <div align="center">
-# FinOps Tagging Policy Generator
+  
+# FinOps Tagging Policy Generator 
 
 **A visual tool for FinOps practitioners to create tagging policies that enable accurate cloud cost attribution.**
 
