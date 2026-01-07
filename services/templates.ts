@@ -44,33 +44,118 @@ export const TEMPLATES: Template[] = [
     }
   },
   {
-    name: "Security & Compliance",
-    description: "Data classification and compliance tracking",
+    name: "Startup",
+    description: "Lightweight policy for smaller organizations",
     policy: {
       required_tags: [
         {
-          name: "DataClassification",
-          description: "Data sensitivity level",
-          allowed_values: ["public", "internal", "confidential", "restricted"],
+          name: "Environment",
+          description: "Deployment environment for the resource",
+          allowed_values: ["production", "staging", "development"],
           validation_regex: null,
-          applies_to: ["s3:bucket", "rds:db"]
-        },
-        {
-          name: "Compliance",
-          description: "Compliance framework",
-          allowed_values: ["HIPAA", "PCI-DSS", "SOC2", "GDPR", "None"],
-          validation_regex: null,
-          applies_to: ["ec2:instance", "rds:db", "s3:bucket"]
+          applies_to: ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
         },
         {
           name: "Owner",
-          description: "Email address of the resource owner",
+          description: "Email address of the team or person responsible for this resource",
           allowed_values: null,
           validation_regex: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
-          applies_to: ["ec2:instance", "rds:db", "s3:bucket"]
+          applies_to: ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
+        },
+        {
+          name: "Project",
+          description: "Project or product name this resource belongs to",
+          allowed_values: null,
+          validation_regex: "^[a-z0-9-]+$",
+          applies_to: ["ec2:instance", "rds:db", "s3:bucket", "lambda:function", "ecs:service"]
         }
       ],
-      optional_tags: []
+      optional_tags: [
+        {
+          name: "CostCenter",
+          description: "Cost center for billing allocation (optional for startups with simple cost structures)",
+          allowed_values: null
+        },
+        {
+          name: "Team",
+          description: "Team name responsible for the resource",
+          allowed_values: null
+        }
+      ]
+    }
+  },
+  {
+    name: "Enterprise",
+    description: "Comprehensive policy for large organizations",
+    policy: {
+      required_tags: [
+        {
+          name: "CostCenter",
+          description: "Financial cost center code for chargeback and showback",
+          allowed_values: null,
+          validation_regex: "^CC-[0-9]{4,6}$",
+          applies_to: ["ec2:instance", "ec2:volume", "ec2:snapshot", "rds:db", "s3:bucket", "lambda:function", "ecs:service", "ecs:task"]
+        },
+        {
+          name: "Environment",
+          description: "Deployment environment classification",
+          allowed_values: ["production", "pre-production", "staging", "qa", "development", "sandbox", "disaster-recovery"],
+          validation_regex: null,
+          applies_to: ["ec2:instance", "ec2:volume", "rds:db", "s3:bucket", "lambda:function", "ecs:service"]
+        },
+        {
+          name: "Owner",
+          description: "Email address of the resource owner for accountability",
+          allowed_values: null,
+          validation_regex: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+          applies_to: ["ec2:instance", "ec2:volume", "ec2:snapshot", "rds:db", "s3:bucket", "lambda:function", "ecs:service", "ecs:task"]
+        },
+        {
+          name: "Application",
+          description: "Application or service identifier from the CMDB",
+          allowed_values: null,
+          validation_regex: "^APP-[A-Z0-9]{3,10}$",
+          applies_to: ["ec2:instance", "ec2:volume", "rds:db", "s3:bucket", "lambda:function", "ecs:service"]
+        },
+        {
+          name: "DataClassification",
+          description: "Data sensitivity classification per corporate security policy",
+          allowed_values: ["public", "internal", "confidential", "restricted", "highly-restricted"],
+          validation_regex: null,
+          applies_to: ["s3:bucket", "rds:db", "ec2:volume", "ec2:snapshot"]
+        },
+        {
+          name: "Compliance",
+          description: "Regulatory compliance requirements applicable to this resource",
+          allowed_values: ["HIPAA", "PCI-DSS", "SOC2", "GDPR", "SOX", "FedRAMP", "HITRUST", "None"],
+          validation_regex: null,
+          applies_to: ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
+        },
+        {
+          name: "BusinessUnit",
+          description: "Business unit or division that owns this resource",
+          allowed_values: ["Engineering", "Finance", "Marketing", "Sales", "Operations", "HR", "Legal", "IT", "Security", "Product"],
+          validation_regex: null,
+          applies_to: ["ec2:instance", "rds:db", "s3:bucket", "lambda:function", "ecs:service"]
+        }
+      ],
+      optional_tags: [
+        {
+          name: "Project",
+          description: "Project identifier for tracking project-specific costs",
+          allowed_values: null
+        },
+        {
+          name: "SupportTier",
+          description: "Support tier level for incident response prioritization",
+          allowed_values: ["platinum", "gold", "silver", "bronze"]
+        },
+        {
+          name: "BackupSchedule",
+          description: "Backup frequency and retention policy",
+          allowed_values: ["daily-30d", "daily-90d", "weekly-1y", "monthly-7y", "none"]
+        }
+      ]
     }
   },
   {
