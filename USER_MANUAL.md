@@ -58,6 +58,17 @@ These are the tags that must be present on resources for cost attribution to wor
 
 **Validation Regex** offers pattern-based validation for more flexible scenarios. Cost center codes often follow patterns like `CC-[0-9]{4,6}` or `FIN-[A-Z]{2}-[0-9]{3}`. Owner emails can be validated with standard email patterns. The generator includes a regex tester so you can verify patterns work before exporting.
 
+**Common Regex Examples:**
+
+| Use Case | Pattern | Example Matches |
+|----------|---------|-----------------|
+| Email Address | `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$` | `john.doe@company.com` |
+| Cost Center | `^CC-[0-9]{4,6}$` | `CC-1234`, `CC-123456` |
+| Project ID | `^[a-z0-9-]+$` | `my-project-123` |
+| Application ID | `^APP-[A-Z0-9]{3,10}$` | `APP-WEB01`, `APP-BACKEND` |
+| AWS Account ID | `^[0-9]{12}$` | `123456789012` |
+| Ticket/JIRA Reference | `^[A-Z]+-[0-9]+$` | `PROJ-123`, `FINOPS-4567` |
+
 **Applies To** specifies which AWS resource types require this tag. The most important resources for cost attribution are typically EC2 instances, RDS databases, and S3 buckets—these usually represent the bulk of your AWS spend.
 
 ### Optional Tags

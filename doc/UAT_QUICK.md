@@ -90,7 +90,22 @@ This quick UAT validates the three core workflows. Takes approximately 20-30 min
 | User Manual Link | Click "User Manual" button, opens GitHub doc | ☐ |
 | Logo Link | Click logo, goes to optimnow.io or returns to start | ☐ |
 | Copy to Clipboard | Click "Copy" in editor, paste elsewhere | ☐ |
-| Regex Tester | Enter regex `^[A-Z]+$`, use Test field, click Run | ☐ |
+| Regex Tester | Enter regex pattern, use Test field, click Run | ☐ |
+
+---
+
+## Regex Test Examples
+
+Use these patterns to test the regex validation feature:
+
+| Use Case | Pattern | Test Value (Valid) | Test Value (Invalid) |
+|----------|---------|-------------------|---------------------|
+| Email | `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$` | `john@company.com` | `john@` |
+| Cost Center | `^CC-[0-9]{4,6}$` | `CC-1234` | `CC-12` |
+| Project ID | `^[a-z0-9-]+$` | `my-project-123` | `My_Project` |
+| Application ID | `^APP-[A-Z0-9]{3,10}$` | `APP-WEB01` | `app-web01` |
+| AWS Account ID | `^[0-9]{12}$` | `123456789012` | `12345` |
+| Ticket/JIRA | `^[A-Z]+-[0-9]+$` | `PROJ-123` | `proj-123` |
 
 ---
 
