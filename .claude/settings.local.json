@@ -11,7 +11,9 @@
       "Bash(npm install:*)",
       "Bash(git pull:*)",
       "Bash(git stash:*)",
-      "Bash(git stash pop:*)"
+      "Bash(git stash pop:*)",
+      "Bash(npm i:*)",
+      "Bash(git restore:*)"
     ]
   }
 }
