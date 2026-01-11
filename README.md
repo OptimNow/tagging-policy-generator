@@ -256,7 +256,7 @@ Plus an **"All Other Resources"** option for comprehensive coverage of unlisted 
 
 ## Security and Privacy
 
-This tool is 100% client-side. Your policies never leave your browser. There are no analytics, no tracking, no external API calls. The only network requests are loading the application itself.
+This tool is 100% client-side. Your policies never leave your browser. We use Vercel Analytics for basic page view and Web Vitals tracking (privacy-friendly, GDPR-compliant, no cookies or personal data collected). No external API calls are made. Your tagging policies remain completely private.
 
 ## Contributing
 
