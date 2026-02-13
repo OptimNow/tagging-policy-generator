@@ -513,14 +513,14 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Import/Export Row */}
+          {/* Import/Export Rows — paired by provider */}
           <div className="grid md:grid-cols-2 gap-8">
 
-            {/* Option 2: Import from AWS Policy */}
+            {/* AWS Import */}
             <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
               <div className="flex items-start gap-4 mb-4">
-                <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                  <Upload className="text-blue-400" />
+                <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                  <Upload className="text-orange-400" />
                 </div>
                 <div className="flex-1">
                   <h2 className="text-xl font-bold">Import AWS Policy</h2>
@@ -545,69 +545,11 @@ const App: React.FC = () => {
               </Button>
             </div>
 
-            {/* Option 3: Import GCP Label Policy */}
+            {/* AWS Export */}
             <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
               <div className="flex items-start gap-4 mb-4">
                 <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                  <Upload className="text-orange-400" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-xl font-bold">Import GCP Policy</h2>
-                  <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Paste a GCP Label Policy JSON to convert it to our format.
-                  </p>
-                </div>
-              </div>
-              <textarea
-                className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
-                placeholder='{"label_policy": { "labels": { ... } }}'
-                value={gcpImportText}
-                onChange={(e) => setGcpImportText(e.target.value)}
-              />
-              {gcpImportError && (
-                <div className="w-full p-2 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs flex items-center gap-2">
-                  <AlertTriangle size={12} /> {gcpImportError}
-                </div>
-              )}
-              <Button variant="secondary" onClick={handleGcpImport} className="w-full" disabled={!gcpImportText.trim()}>
-                <Upload size={14} className="mr-2" /> Import & Edit
-              </Button>
-            </div>
-
-            {/* Option 6: Import Azure Policy */}
-            <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
-              <div className="flex items-start gap-4 mb-4">
-                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
-                  <Upload className="text-purple-400" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-xl font-bold">Import Azure Policy</h2>
-                  <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Paste an Azure Policy Initiative JSON to convert it to our format.
-                  </p>
-                </div>
-              </div>
-              <textarea
-                className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
-                placeholder='{"policyDefinitions": [{ ... }]}'
-                value={azureImportText}
-                onChange={(e) => setAzureImportText(e.target.value)}
-              />
-              {azureImportError && (
-                <div className="w-full p-2 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs flex items-center gap-2">
-                  <AlertTriangle size={12} /> {azureImportError}
-                </div>
-              )}
-              <Button variant="secondary" onClick={handleAzureImport} className="w-full" disabled={!azureImportText.trim()}>
-                <Upload size={14} className="mr-2" /> Import & Edit
-              </Button>
-            </div>
-
-            {/* Option 4: Export to AWS Policy */}
-            <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
-              <div className="flex items-start gap-4 mb-4">
-                <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0">
-                  <Download className="text-green-400" />
+                  <Download className="text-orange-400" />
                 </div>
                 <div className="flex-1">
                   <h2 className="text-xl font-bold">Export to AWS Policy</h2>
@@ -637,11 +579,40 @@ const App: React.FC = () => {
               </Button>
             </div>
 
-            {/* Option 5: Export to GCP Label Policy */}
+            {/* GCP Import */}
             <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
               <div className="flex items-start gap-4 mb-4">
-                <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
-                  <Download className="text-yellow-400" />
+                <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                  <Upload className="text-blue-400" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold">Import GCP Policy</h2>
+                  <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Paste a GCP Label Policy JSON to convert it to our format.
+                  </p>
+                </div>
+              </div>
+              <textarea
+                className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
+                placeholder='{"label_policy": { "labels": { ... } }}'
+                value={gcpImportText}
+                onChange={(e) => setGcpImportText(e.target.value)}
+              />
+              {gcpImportError && (
+                <div className="w-full p-2 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs flex items-center gap-2">
+                  <AlertTriangle size={12} /> {gcpImportError}
+                </div>
+              )}
+              <Button variant="secondary" onClick={handleGcpImport} className="w-full" disabled={!gcpImportText.trim()}>
+                <Upload size={14} className="mr-2" /> Import & Edit
+              </Button>
+            </div>
+
+            {/* GCP Export */}
+            <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
+              <div className="flex items-start gap-4 mb-4">
+                <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                  <Download className="text-blue-400" />
                 </div>
                 <div className="flex-1">
                   <h2 className="text-xl font-bold">Export to GCP Policy</h2>
@@ -671,11 +642,40 @@ const App: React.FC = () => {
               </Button>
             </div>
 
-            {/* Option 7: Export to Azure Policy */}
+            {/* Azure Import */}
             <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
               <div className="flex items-start gap-4 mb-4">
-                <div className="w-12 h-12 rounded-full bg-violet-500/10 flex items-center justify-center flex-shrink-0">
-                  <Download className="text-violet-400" />
+                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                  <Upload className="text-purple-400" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold">Import Azure Policy</h2>
+                  <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Paste an Azure Policy Initiative JSON to convert it to our format.
+                  </p>
+                </div>
+              </div>
+              <textarea
+                className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
+                placeholder='{"policyDefinitions": [{ ... }]}'
+                value={azureImportText}
+                onChange={(e) => setAzureImportText(e.target.value)}
+              />
+              {azureImportError && (
+                <div className="w-full p-2 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs flex items-center gap-2">
+                  <AlertTriangle size={12} /> {azureImportError}
+                </div>
+              )}
+              <Button variant="secondary" onClick={handleAzureImport} className="w-full" disabled={!azureImportText.trim()}>
+                <Upload size={14} className="mr-2" /> Import & Edit
+              </Button>
+            </div>
+
+            {/* Azure Export */}
+            <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
+              <div className="flex items-start gap-4 mb-4">
+                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                  <Download className="text-purple-400" />
                 </div>
                 <div className="flex-1">
                   <h2 className="text-xl font-bold">Export to Azure Policy</h2>
@@ -738,10 +738,10 @@ const App: React.FC = () => {
              <h1 className={`font-bold text-lg hidden sm:block ${isDark ? 'text-white' : 'text-charcoal'}`}>Policy Builder</h1>
              <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                policy.cloud_provider === 'gcp'
-                 ? 'bg-orange-500/20 text-orange-400'
+                 ? 'bg-blue-500/20 text-blue-400'
                  : policy.cloud_provider === 'azure'
                    ? 'bg-purple-500/20 text-purple-400'
-                   : 'bg-blue-500/20 text-blue-400'
+                   : 'bg-orange-500/20 text-orange-400'
              }`}>
                {policy.cloud_provider.toUpperCase()}
              </span>
