@@ -89,8 +89,10 @@ const App: React.FC = () => {
       }
     };
 
-    // Set initial state
-    window.history.replaceState({ view: 'start' }, '', '#');
+    // Set initial state, respecting direct navigation to #editor
+    const initialView = window.location.hash === '#editor' ? 'editor' : 'start';
+    setViewState(initialView);
+    window.history.replaceState({ view: initialView }, '', window.location.hash || '#');
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -110,10 +112,7 @@ const App: React.FC = () => {
   // Update validation whenever policy changes
   useEffect(() => {
     if (view === 'editor') {
-      const errors = validatePolicy(policy);
-      setValidationErrors(errors);
-      // Update timestamp
-      setPolicy(prev => ({ ...prev, last_updated: new Date().toISOString() }));
+      setValidationErrors(validatePolicy(policy));
     }
   }, [policy, view]);
 
@@ -155,7 +154,7 @@ const App: React.FC = () => {
   };
 
   // Handle AWS Export (convert pasted JSON policy to AWS format)
-  const handleExportConvert = () => {
+  const handleExportConvert = async () => {
     try {
       const parsed = JSON.parse(awsExportText);
       // Check if it has the expected structure
@@ -166,7 +165,7 @@ const App: React.FC = () => {
       const awsJson = JSON.stringify(awsPolicy, null, 2);
 
       // Copy to clipboard
-      navigator.clipboard.writeText(awsJson);
+      await navigator.clipboard.writeText(awsJson);
       setExportError(null);
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 3000);
@@ -197,7 +196,7 @@ const App: React.FC = () => {
   };
 
   // Handle GCP Export (convert pasted JSON policy to GCP format)
-  const handleGcpExportConvert = () => {
+  const handleGcpExportConvert = async () => {
     try {
       const parsed = JSON.parse(gcpExportText);
       if (!parsed.required_tags && !parsed.optional_tags) {
@@ -206,7 +205,7 @@ const App: React.FC = () => {
       const gcpPolicy = convertMcpToGcpPolicy(parsed as Policy);
       const gcpJson = JSON.stringify(gcpPolicy, null, 2);
 
-      navigator.clipboard.writeText(gcpJson);
+      await navigator.clipboard.writeText(gcpJson);
       setGcpExportError(null);
       setGcpExportSuccess(true);
       setTimeout(() => setGcpExportSuccess(false), 3000);
@@ -237,7 +236,7 @@ const App: React.FC = () => {
   };
 
   // Handle Azure Export (convert pasted JSON policy to Azure Policy format)
-  const handleAzureExportConvert = () => {
+  const handleAzureExportConvert = async () => {
     try {
       const parsed = JSON.parse(azureExportText);
       if (!parsed.required_tags && !parsed.optional_tags) {
@@ -246,7 +245,7 @@ const App: React.FC = () => {
       const azurePolicy = convertMcpToAzurePolicy(parsed as Policy);
       const azureJson = JSON.stringify(azurePolicy, null, 2);
 
-      navigator.clipboard.writeText(azureJson);
+      await navigator.clipboard.writeText(azureJson);
       setAzureExportError(null);
       setAzureExportSuccess(true);
       setTimeout(() => setAzureExportSuccess(false), 3000);
@@ -317,14 +316,17 @@ const App: React.FC = () => {
     });
   };
 
+  // Stamp last_updated at export-time, not during editing
+  const policyForExport = (): Policy => ({ ...policy, last_updated: new Date().toISOString() });
+
   // Export
   const handleDownloadJson = () => {
-    downloadJson(policy);
+    downloadJson(policyForExport());
     setShowDownloadMenu(false);
   };
 
   const handleDownloadMarkdown = () => {
-    downloadMarkdown(policy);
+    downloadMarkdown(policyForExport());
     setShowDownloadMenu(false);
   };
 
@@ -336,7 +338,7 @@ const App: React.FC = () => {
       );
       if (!proceed) return;
     }
-    downloadAwsPolicy(policy);
+    downloadAwsPolicy(policyForExport());
     setShowDownloadMenu(false);
   };
 
@@ -348,7 +350,7 @@ const App: React.FC = () => {
       );
       if (!proceed) return;
     }
-    downloadGcpPolicy(policy);
+    downloadGcpPolicy(policyForExport());
     setShowDownloadMenu(false);
   };
 
@@ -360,14 +362,18 @@ const App: React.FC = () => {
       );
       if (!proceed) return;
     }
-    downloadAzurePolicy(policy);
+    downloadAzurePolicy(policyForExport());
     setShowDownloadMenu(false);
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(JSON.stringify(policy, null, 2));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(policyForExport(), null, 2));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
   };
 
   const filteredTemplates = TEMPLATES.filter(t => t.provider === selectedProvider);

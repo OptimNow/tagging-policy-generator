@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-The FinOps Tagging Policy Generator is a client-side React/TypeScript web application that helps FinOps practitioners create tagging/labeling policies for cloud cost attribution across **AWS and GCP**. The tool runs entirely in the browser with no backend, and generates JSON policy files compatible with the FinOps Tag Compliance MCP Server.
+The FinOps Tagging Policy Generator is a client-side React/TypeScript web application that helps FinOps practitioners create tagging/labeling policies for cloud cost attribution across **AWS, GCP, and Azure**. The tool runs entirely in the browser with no backend, and generates JSON policy files compatible with the FinOps Tag Compliance MCP Server.
 
 **Live app:** http://tagpolgenerator.optimnow.io/
 
@@ -28,9 +28,9 @@ npm run preview      # Preview production build locally
 This is a single-page application with two main views managed by state:
 
 1. **Start View** (`view === 'start'`): Landing page with options:
-   - Create from scratch with AWS or GCP provider toggle (with optional provider-specific templates)
-   - Import from AWS Organizations tag policy or GCP label policy
-   - Export to AWS Organizations format or GCP label policy format (converter utilities)
+   - Create from scratch with AWS/GCP/Azure provider toggle (with optional provider-specific templates)
+   - Import from AWS Organizations tag policy, GCP label policy, or Azure Policy Initiative
+   - Export to AWS Organizations format, GCP label policy format, or Azure Policy Initiative format
 
 2. **Editor View** (`view === 'editor'`): Split-screen policy builder
    - Left panel: Form-based policy editor
@@ -41,41 +41,45 @@ Navigation uses browser history API (pushState/popState) so back/forward buttons
 ### Core Data Flow
 
 ```
-Policy (types.ts) — includes cloud_provider: 'aws' | 'gcp'
+Policy (types.ts) — includes cloud_provider: 'aws' | 'gcp' | 'azure'
   ↓
 App.tsx (state management, provider-aware routing)
   ↓
 ├─> TagForm.tsx (individual tag editor, provider-aware resource categories)
 ├─> validator.ts (real-time validation with provider-specific rules)
-├─> exporter.ts (JSON/Markdown/AWS/GCP downloads)
+├─> exporter.ts (JSON/Markdown/AWS/GCP/Azure downloads)
 ├─> converter.ts (AWS Organizations ↔ MCP format conversion)
-└─> gcp-converter.ts (GCP Label Policy ↔ MCP format conversion)
+├─> gcp-converter.ts (GCP Label Policy ↔ MCP format conversion)
+└─> azure-converter.ts (Azure Policy Initiative ↔ MCP format conversion)
 ```
 
 ### Key Type Definitions (types.ts)
 
-- `CloudProvider`: `'aws' | 'gcp'` — discriminator for all provider-specific behavior
+- `CloudProvider`: `'aws' | 'gcp' | 'azure'` — discriminator for all provider-specific behavior
 - `Policy`: Root data structure with `cloud_provider`, version, timestamps, required_tags, optional_tags, and tag_naming_rules
-- `RequiredTag`: Tags that must be present; includes `applies_to` field specifying resource types (AWS or GCP format)
+- `RequiredTag`: Tags that must be present; includes `applies_to` field specifying resource types (AWS, GCP, or Azure format)
 - `OptionalTag`: Recommended tags; no `applies_to` or `validation_regex` fields
-- `AWS_RESOURCE_CATEGORIES`: 34 AWS resource types organized by FinOps spend impact (6 categories)
+- `AWS_RESOURCE_CATEGORIES`: 27 AWS resource types organized by FinOps spend impact (6 categories)
 - `GCP_RESOURCE_CATEGORIES`: 39 GCP resource types organized by FinOps spend impact (7 categories — includes Security & Operations)
+- `AZURE_RESOURCE_CATEGORIES`: 89 Azure resource types organized by FinOps spend impact (11 categories — Compute, Storage, Database, AI/ML, Networking, Containers & Kubernetes, Analytics & Integration, Web & Application, Security & Identity, Monitoring, DevOps & DevCenter)
 - `RESOURCE_CATEGORIES`: Backward-compatible alias for `AWS_RESOURCE_CATEGORIES`
-- `getResourceCategories(provider)` / `getResourceTypes(provider)`: Helper functions for provider-aware resource lookups
+- `getResourceCategories(provider)` / `getResourceTypes(provider)`: Helper functions for provider-aware resource lookups (switch on `'aws'`, `'gcp'`, `'azure'`)
 
 ### Service Modules
 
 **services/templates.ts**
-- 8 pre-built policy templates: 4 AWS + 4 GCP (Cost Allocation, Startup, Enterprise, Minimal Starter for each)
+- 12 pre-built policy templates: 4 AWS + 4 GCP + 4 Azure (Cost Allocation, Startup, Enterprise, Minimal Starter for each)
 - Each template has a `provider: CloudProvider` field to filter by selected provider
-- AWS templates use `enforced_for` resource type names (e.g., `ec2:instance`, `rds:db-instance`)
+- AWS templates use `enforced_for` resource type names (e.g., `ec2:instance`, `rds:db`)
 - GCP templates use `snake_case` label keys and full resource URIs (e.g., `compute.googleapis.com/Instance`)
+- Azure templates use PascalCase tag names and `Microsoft.*` resource types (e.g., `Microsoft.Compute/virtualMachines`)
 
 **services/validator.ts**
 - Real-time validation triggered on every policy change
 - Checks: required tag existence, duplicate names, empty fields, valid regex patterns, resource type selection
 - Provider-aware: validates `applies_to` entries against the policy's `cloud_provider` resource list
 - GCP-specific rules: label keys must be lowercase (`^[a-z][a-z0-9_-]*$`), max 63 chars for keys and values
+- Azure-specific rules: tag names cannot contain `<>%&\?/`, cannot use reserved prefixes (`microsoft`, `azure`, `windows`), max 512 chars for keys, max 256 chars for values, max 50 tags per resource
 - Defaults missing `cloud_provider` to `'aws'` for backward compatibility
 - Returns array of error strings displayed in UI footer
 
@@ -93,21 +97,28 @@ App.tsx (state management, provider-aware routing)
 - **Important**: GCP Label Policies don't support regex validation. Export warns about regex loss, uppercase key conversion, and length limits.
 - `getGcpExportWarnings()`: Generates warnings about features that won't be preserved
 
+**services/azure-converter.ts**
+- Bidirectional conversion between internal format and Azure Policy Initiative format
+- **Azure → Internal**: Parses Azure Policy Initiative JSON (policyDefinitions array) or single definition; maps `effect: 'deny'` → required, `effect: 'audit'` → optional; sets `cloud_provider: 'azure'`
+- **Internal → Azure**: Generates one policy definition per tag (deny for required, audit for optional); includes `tagInheritanceRecommendations` (4 built-in policy IDs for tag inheritance from resource groups/subscriptions) and `managedResourceGroupNotes` (AKS, Databricks, Synapse, Azure ML, etc.)
+- **Important**: Azure Policy doesn't support regex validation. Export warns about regex loss, tag limits, storage name limits, managed RG issues, and FOCUS export gaps.
+- `getAzureExportWarnings()`: Generates warnings about features that won't be preserved
+
 **services/exporter.ts**
-- Four export formats: JSON (native, filename is provider-aware), Markdown (includes Cloud Provider line), AWS Policy, GCP Label Policy
+- Five export formats: JSON (native, filename is provider-aware), Markdown (includes Cloud Provider line), AWS Policy, GCP Label Policy, Azure Policy Initiative
 - Uses browser download API (createElement('a'), setAttribute, click, remove)
 
 ### Component Architecture
 
 **App.tsx**
 - Central state container for the entire `Policy` object
-- Manages view switching, template application, import/export (AWS and GCP), and history navigation
-- `selectedProvider` state controls provider toggle on start view; `policy.cloud_provider` drives editor behavior
-- Provider badge (blue=AWS, orange=GCP) shown in editor header
+- Manages view switching, template application, import/export (AWS, GCP, and Azure), and history navigation
+- `selectedProvider` state controls 3-way provider toggle on start view; `policy.cloud_provider` drives editor behavior
+- Provider badge (blue=AWS, orange=GCP, purple=Azure) shown in editor header
 - Template dropdown and download menu filter by `policy.cloud_provider`
-- Start view: 2x2 grid for Import AWS / Import GCP / Export AWS / Export GCP
-- Updates `last_updated` timestamp automatically on changes
-- useEffect hooks for: history management, click-outside detection, validation on changes
+- Start view: 3x2 grid for Import/Export cards (AWS, GCP, Azure)
+- `last_updated` timestamp is stamped at export-time only (not during editing) to avoid render-loop issues
+- useEffect hooks for: history management (respects `#editor` deep-links), click-outside detection, validation on changes
 
 **components/TagForm.tsx**
 - Collapsible card for editing individual tags (required or optional)
@@ -117,8 +128,8 @@ App.tsx (state management, provider-aware routing)
   - Resource type selection organized by categories with expand/collapse
   - Category-level checkboxes for bulk selection
   - Visual indicators for partial selections (opacity on indeterminate state)
-  - Grid layout adapts: `grid-cols-2` for AWS (short names), `grid-cols-1` for GCP (long URIs)
-  - Placeholder text adapts: `e.g. CostCenter` (AWS) vs `e.g. cost_center` (GCP)
+  - Grid layout adapts: `grid-cols-2` for AWS (short names), `grid-cols-1` for GCP/Azure (long URIs)
+  - Placeholder text adapts: `e.g. CostCenter` (AWS/Azure) vs `e.g. cost_center` (GCP)
 - State: `isExpanded`, `testRegexInput`, `regexTestResult`, `expandedCategories`
 - `expandedCategories` resets when `cloudProvider` changes
 
@@ -133,11 +144,11 @@ App.tsx (state management, provider-aware routing)
 
 ## Cloud Provider Integration
 
-The tool bridges the internal MCP format with native policy formats for both AWS and GCP.
+The tool bridges the internal MCP format with native policy formats for AWS, GCP, and Azure.
 
 **Internal MCP Format (shared):**
 - Flexible: supports regex validation, specific resource types per tag, optional vs required distinction
-- `cloud_provider` field discriminates AWS vs GCP behavior throughout the app
+- `cloud_provider` field discriminates AWS vs GCP vs Azure behavior throughout the app
 - Used by FinOps Tag Compliance MCP Server
 
 ### AWS Organizations Tag Policy Format (converter.ts)
@@ -159,6 +170,17 @@ The tool bridges the internal MCP format with native policy formats for both AWS
 - Limitations: No regex support, keys must be lowercase, max 63 chars for keys and values
 - Auto-lowercases keys on export: uppercase chars become underscores
 - Resource types use full GCP URIs (e.g., `compute.googleapis.com/Instance`)
+
+### Azure Policy Initiative Format (azure-converter.ts)
+
+- Generates Azure Policy Initiative JSON with one policy definition per tag
+- Each definition includes `policyRule` with `if/then` blocks and `effect` (deny for required, audit for optional)
+- Parameters: `tagName` (string) and optionally `allowedValues` (array)
+- Export includes informational sections:
+  - `tagInheritanceRecommendations`: 4 built-in Azure Policy IDs for inheriting tags from resource groups and subscriptions
+  - `managedResourceGroupNotes`: Lists services that create managed resource groups (AKS, Databricks, Synapse, Azure ML, Managed Applications, App Service Environment)
+- Limitations: No regex support, tag names max 512 chars, values max 256 chars, max 50 tags per resource
+- Resource types use `Microsoft.*` namespace format (e.g., `Microsoft.Compute/virtualMachines`)
 
 ## Styling & UI
 
@@ -194,10 +216,11 @@ The application is 100% client-side:
 
 ### Adding a New Template
 1. Add entry to `TEMPLATES` array in services/templates.ts
-2. Set `provider: 'aws'` or `provider: 'gcp'` and `cloud_provider` in the policy partial
+2. Set `provider: 'aws'`, `'gcp'`, or `'azure'` and `cloud_provider` in the policy partial
 3. Include required_tags with all fields (name, description, allowed_values, validation_regex, applies_to)
 4. For AWS: use resource type names from `AWS_RESOURCE_CATEGORIES` (e.g., `ec2:instance`)
 5. For GCP: use `snake_case` label keys and full resource URIs from `GCP_RESOURCE_CATEGORIES` (e.g., `compute.googleapis.com/Instance`)
+6. For Azure: use PascalCase tag names and `Microsoft.*` resource types from `AZURE_RESOURCE_CATEGORIES` (e.g., `Microsoft.Compute/virtualMachines`)
 
 ### Adding a New Resource Type
 **AWS:**
@@ -211,6 +234,12 @@ The application is 100% client-side:
 3. The `GCP_RESOURCE_TYPES` flat array auto-derives from categories
 4. Principle: only include resources that **(a) support GCP tags** and **(b) carry meaningful costs**
 
+**Azure:**
+1. Update `AZURE_RESOURCE_CATEGORIES` in types.ts (categorize by spend impact; 11 categories)
+2. Use `Microsoft.*` namespace format: `Microsoft.Service/resourceType`
+3. The `AZURE_RESOURCE_TYPES` flat array auto-derives from categories
+4. Principle: only include resources where BOTH **"Supports tags" = Yes** AND **"Tag in cost report" = Yes** (per Azure docs)
+
 ### Adding Validation Rules
 1. Extend `validatePolicy()` in services/validator.ts
 2. Return descriptive error strings (displayed directly in UI)
@@ -220,7 +249,8 @@ The application is 100% client-side:
 1. For JSON/Markdown: Edit functions in services/exporter.ts
 2. For AWS format: Modify converter.ts (be mindful of AWS policy syntax constraints)
 3. For GCP format: Modify gcp-converter.ts (be mindful of GCP label restrictions: lowercase, 63-char limits)
-4. Add warnings via `getAwsExportWarnings()` or `getGcpExportWarnings()` if features won't be preserved
+4. For Azure format: Modify azure-converter.ts (be mindful of Azure tag restrictions: forbidden chars, reserved prefixes, 512/256 char limits)
+5. Add warnings via `getAwsExportWarnings()`, `getGcpExportWarnings()`, or `getAzureExportWarnings()` if features won't be preserved
 
 ## File Organization
 
@@ -229,7 +259,7 @@ The application is 100% client-side:
 ├── index.html              # Entry point with Tailwind config and SEO meta tags
 ├── index.tsx               # React root, ThemeContext provider
 ├── App.tsx                 # Main application logic (provider-aware)
-├── types.ts                # Core types, CloudProvider, AWS + GCP resource categories
+├── types.ts                # Core types, CloudProvider, AWS + GCP + Azure resource categories
 ├── vite.config.ts          # Build configuration
 ├── tsconfig.json           # TypeScript configuration
 ├── components/
@@ -237,14 +267,15 @@ The application is 100% client-side:
 │   ├── Input.tsx           # Form inputs (Input, TextArea, Checkbox)
 │   └── TagForm.tsx         # Individual tag editor (provider-aware, complex)
 ├── services/
-│   ├── templates.ts        # Pre-built policy templates (4 AWS + 4 GCP)
+│   ├── templates.ts        # Pre-built policy templates (4 AWS + 4 GCP + 4 Azure)
 │   ├── validator.ts        # Real-time policy validation (provider-specific rules)
 │   ├── converter.ts        # AWS Organizations ↔ MCP format conversion
 │   ├── gcp-converter.ts    # GCP Label Policy ↔ MCP format conversion
-│   └── exporter.ts         # Download handlers (JSON/MD/AWS/GCP)
+│   ├── azure-converter.ts  # Azure Policy Initiative ↔ MCP format conversion
+│   └── exporter.ts         # Download handlers (JSON/MD/AWS/GCP/Azure)
 ├── context/
 │   └── ThemeContext.tsx    # Dark/light theme management
-├── examples/               # Sample policy files (AWS and GCP)
+├── examples/               # Sample policy files (AWS, GCP, and Azure)
 ├── doc/                    # Documentation and UAT guides
 └── dist/                   # Build output (gitignored)
 ```
@@ -257,5 +288,8 @@ The application is 100% client-side:
 - **GCP policy limitations**: gcp-converter.ts documents lossy features (regex validation, uppercase keys auto-lowercased, 63-char limits)
 - **GCP resource type format**: Always use full URIs (`service.googleapis.com/ResourceType`), never short names
 - **GCP label key rules**: Must be lowercase, start with a letter, match `^[a-z][a-z0-9_-]*$`, max 63 chars
+- **Azure resource type format**: Always use `Microsoft.*` namespace format (e.g., `Microsoft.Compute/virtualMachines`), never short names
+- **Azure tag constraints**: Names cannot contain `<>%&\?/`, cannot use reserved prefixes (`microsoft`, `azure`, `windows`), max 512 chars for keys, max 256 chars for values, max 50 tags per resource
+- **Azure policy limitations**: azure-converter.ts documents lossy features (regex validation not supported, managed resource group limitations, FOCUS export gaps)
 - **Provider backward compatibility**: Missing `cloud_provider` always defaults to `'aws'` throughout the app
 - **Port configuration**: Dev server runs on 3000, not Vite's default 5173 (configured in vite.config.ts)
