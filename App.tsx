@@ -3,9 +3,8 @@ import { Policy, RequiredTag, OptionalTag, CloudProvider } from './types';
 import { TEMPLATES } from './services/templates';
 import { validatePolicy } from './services/validator';
 import { convertAwsPolicyToMcp, convertMcpToAwsPolicy, getAwsExportWarnings } from './services/converter';
-import { convertGcpPolicyToMcp, convertMcpToGcpPolicy, getGcpExportWarnings } from './services/gcp-converter';
 import { convertAzurePolicyToMcp, convertMcpToAzurePolicy, getAzureExportWarnings } from './services/azure-converter';
-import { downloadJson, downloadMarkdown, downloadAwsPolicy, downloadGcpPolicy, downloadAzurePolicy } from './services/exporter';
+import { downloadJson, downloadMarkdown, downloadAwsPolicy, downloadAzurePolicy } from './services/exporter';
 import { Button } from './components/Button';
 import { Input, Checkbox } from './components/Input';
 import { TagForm } from './components/TagForm';
@@ -52,11 +51,6 @@ const App: React.FC = () => {
   const [importError, setImportError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState(false);
-  const [gcpImportText, setGcpImportText] = useState('');
-  const [gcpExportText, setGcpExportText] = useState('');
-  const [gcpImportError, setGcpImportError] = useState<string | null>(null);
-  const [gcpExportError, setGcpExportError] = useState<string | null>(null);
-  const [gcpExportSuccess, setGcpExportSuccess] = useState(false);
   const [azureImportText, setAzureImportText] = useState('');
   const [azureExportText, setAzureExportText] = useState('');
   const [azureImportError, setAzureImportError] = useState<string | null>(null);
@@ -176,46 +170,6 @@ const App: React.FC = () => {
         setExportError("Unknown error occurred during export");
       }
       setExportSuccess(false);
-    }
-  };
-
-  // Handle GCP Import
-  const handleGcpImport = () => {
-    try {
-      const converted = convertGcpPolicyToMcp(gcpImportText);
-      setPolicy(converted);
-      setGcpImportError(null);
-      setView('editor');
-    } catch (e) {
-      if (e instanceof Error) {
-        setGcpImportError(e.message);
-      } else {
-        setGcpImportError("Unknown error occurred during import");
-      }
-    }
-  };
-
-  // Handle GCP Export (convert pasted JSON policy to GCP format)
-  const handleGcpExportConvert = async () => {
-    try {
-      const parsed = JSON.parse(gcpExportText);
-      if (!parsed.required_tags && !parsed.optional_tags) {
-        throw new Error("Invalid policy format. Expected required_tags or optional_tags.");
-      }
-      const gcpPolicy = convertMcpToGcpPolicy(parsed as Policy);
-      const gcpJson = JSON.stringify(gcpPolicy, null, 2);
-
-      await navigator.clipboard.writeText(gcpJson);
-      setGcpExportError(null);
-      setGcpExportSuccess(true);
-      setTimeout(() => setGcpExportSuccess(false), 3000);
-    } catch (e) {
-      if (e instanceof Error) {
-        setGcpExportError(e.message);
-      } else {
-        setGcpExportError("Unknown error occurred during export");
-      }
-      setGcpExportSuccess(false);
     }
   };
 
@@ -339,18 +293,6 @@ const App: React.FC = () => {
       if (!proceed) return;
     }
     downloadAwsPolicy(policyForExport());
-    setShowDownloadMenu(false);
-  };
-
-  const handleDownloadGcpPolicy = () => {
-    const warnings = getGcpExportWarnings(policy);
-    if (warnings.length > 0) {
-      const proceed = window.confirm(
-        `Note: Some features will not be preserved in GCP format:\n\n${warnings.join('\n')}\n\nContinue with export?`
-      );
-      if (!proceed) return;
-    }
-    downloadGcpPolicy(policyForExport());
     setShowDownloadMenu(false);
   };
 
@@ -575,69 +517,6 @@ const App: React.FC = () => {
                 </div>
               )}
               <Button variant="secondary" onClick={handleExportConvert} className="w-full" disabled={!awsExportText.trim()}>
-                <Download size={14} className="mr-2" /> Convert & Copy
-              </Button>
-            </div>
-
-            {/* GCP Import */}
-            <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
-              <div className="flex items-start gap-4 mb-4">
-                <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                  <Upload className="text-blue-400" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-xl font-bold">Import GCP Policy</h2>
-                  <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Paste a GCP Label Policy JSON to convert it to our format.
-                  </p>
-                </div>
-              </div>
-              <textarea
-                className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
-                placeholder='{"label_policy": { "labels": { ... } }}'
-                value={gcpImportText}
-                onChange={(e) => setGcpImportText(e.target.value)}
-              />
-              {gcpImportError && (
-                <div className="w-full p-2 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs flex items-center gap-2">
-                  <AlertTriangle size={12} /> {gcpImportError}
-                </div>
-              )}
-              <Button variant="secondary" onClick={handleGcpImport} className="w-full" disabled={!gcpImportText.trim()}>
-                <Upload size={14} className="mr-2" /> Import & Edit
-              </Button>
-            </div>
-
-            {/* GCP Export */}
-            <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
-              <div className="flex items-start gap-4 mb-4">
-                <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                  <Download className="text-blue-400" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-xl font-bold">Export to GCP Policy</h2>
-                  <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Paste a policy JSON to convert it to GCP Label Policy format.
-                  </p>
-                </div>
-              </div>
-              <textarea
-                className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
-                placeholder='{"version": "1.0", "required_tags": [...] }'
-                value={gcpExportText}
-                onChange={(e) => setGcpExportText(e.target.value)}
-              />
-              {gcpExportError && (
-                <div className="w-full p-2 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs flex items-center gap-2">
-                  <AlertTriangle size={12} /> {gcpExportError}
-                </div>
-              )}
-              {gcpExportSuccess && (
-                <div className="w-full p-2 mb-4 bg-green-500/10 border border-green-500/20 rounded text-green-400 text-xs flex items-center gap-2">
-                  <CheckCircle size={12} /> GCP label policy copied to clipboard!
-                </div>
-              )}
-              <Button variant="secondary" onClick={handleGcpExportConvert} className="w-full" disabled={!gcpExportText.trim()}>
                 <Download size={14} className="mr-2" /> Convert & Copy
               </Button>
             </div>
@@ -895,14 +774,6 @@ const App: React.FC = () => {
                       className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}
                     >
                       AWS Tag Policy
-                    </button>
-                  )}
-                  {policy.cloud_provider === 'gcp' && (
-                    <button
-                      onClick={handleDownloadGcpPolicy}
-                      className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}
-                    >
-                      GCP Label Policy
                     </button>
                   )}
                   {policy.cloud_provider === 'azure' && (

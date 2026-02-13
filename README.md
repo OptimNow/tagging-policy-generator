@@ -20,9 +20,9 @@ The generator runs entirely in your browser—no data leaves your machine, no AP
 
 ## What This Tool Does
 
-The FinOps Tagging Policy Generator creates JSON policy files that define your organization's cost attribution tags. These policies specify which tags (or labels, in GCP terminology) are required on which resources, what values are acceptable, and how tag names should be formatted. You can also export to your cloud provider's native format: AWS Organizations Tag Policy, GCP Label Policy, or Azure Policy Initiative.
+The FinOps Tagging Policy Generator creates JSON policy files that define your organization's cost attribution tags. These policies specify which tags (or labels, in GCP terminology) are required on which resources, what values are acceptable, and how tag names should be formatted. For AWS and Azure, you can also export to native policy formats (AWS Organizations Tag Policy or Azure Policy Initiative) that can be uploaded directly to your cloud provider.
 
-The output is designed to work with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp), but the JSON format is straightforward enough to integrate with any compliance checking system you might be using.
+The output is designed to work with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp), but the JSON format is straightforward enough to integrate with any compliance checking system you might be using. For AWS and Azure, you can also export to native policy formats (AWS Organizations Tag Policy and Azure Policy Initiative). For GCP, there is no native label policy format — the JSON export is used with the MCP Server for compliance monitoring.
 
 A typical cost attribution policy looks like this:
 
@@ -121,10 +121,11 @@ Templates automatically use provider-appropriate conventions: PascalCase tag nam
 **Import** takes an existing cloud-native policy and converts it into the generator's format. You can import from:
 
 - AWS Organizations Tag Policy
-- GCP Label Policy JSON
 - Azure Policy Initiative JSON
 
-**Export** on the start screen lets you paste a generator JSON policy and convert it to any of the three native formats.
+**Export** on the start screen lets you paste a generator JSON policy and convert it to AWS Organizations or Azure Policy Initiative format.
+
+> **Note on GCP:** There are no GCP import/export tiles because GCP does not have a native label policy format. The GCP policy you build here is exported as JSON and used with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp) for compliance monitoring.
 
 ### The Policy Builder Interface
 
@@ -160,15 +161,14 @@ Optional tags are recommendations rather than requirements. Use these for tags t
 
 The Download button offers multiple formats:
 
-- **JSON** exports the raw policy file for use with the FinOps Tag Compliance MCP Server or other automation tools
+- **JSON** exports the raw policy file for use with the FinOps Tag Compliance MCP Server or other automation tools. For GCP policies, this is the primary export format.
 - **Markdown** generates a human-readable document you can share with teams or include in documentation
 - **AWS Tag Policy** (AWS policies) exports to AWS Organizations Tag Policy format with `enforced_for` and `report_required_tag_for`
-- **GCP Label Policy** (GCP policies) exports to GCP Label Policy JSON with auto-lowercased keys
 - **Azure Policy Initiative** (Azure policies) exports with deny effect for required tags, audit effect for optional tags
 
 ### Saving and Loading Policies
 
-Policies are not saved automatically or stored anywhere. This is intentional: your tagging strategy is yours, and nothing is transmitted to external servers. Use the Download button to save your work, and any of the import features to load it back later—they all accept the generator's native JSON format as well as their respective cloud-native formats.
+Policies are not saved automatically or stored anywhere. This is intentional: your tagging strategy is yours, and nothing is transmitted to external servers. Use the Download button to save your work. To load a policy back, use the AWS or Azure import features on the start screen — they accept the generator's native JSON format as well as their respective cloud-native formats.
 
 ## Common FinOps Tagging Patterns
 

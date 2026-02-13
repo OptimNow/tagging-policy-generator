@@ -44,13 +44,14 @@ Templates automatically populate with provider-appropriate tag names (e.g., Pasc
 
 ### Import and Export
 
-Below the create section, you'll find six cards arranged in three rows, one per provider:
+Below the create section, you'll find four cards arranged in two rows:
 
-- **Import AWS Policy / Export to AWS Policy** - Convert between the generator's format and AWS Organizations Tag Policy format
-- **Import GCP Policy / Export to GCP Policy** - Convert between the generator's format and GCP Label Policy format
-- **Import Azure Policy / Export to Azure Policy** - Convert between the generator's format and Azure Policy Initiative format
+- **Import AWS Policy / Export to AWS Policy** — Convert between the generator's format and AWS Organizations Tag Policy format
+- **Import Azure Policy / Export to Azure Policy** — Convert between the generator's format and Azure Policy Initiative format
 
 **Importing** lets you paste an existing native policy to convert it into the generator's format for editing. **Exporting** lets you paste a generator JSON policy and get it converted to native format, copied to your clipboard.
+
+> **Note on GCP:** There are no GCP import/export tiles because GCP does not have a native label policy format that can be uploaded to the GCP console. The GCP policy you build here is exported as the generator's JSON format and is designed to be used with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp) for compliance monitoring. See [How It Works for GCP](#how-it-works-for-gcp) for details.
 
 ---
 
@@ -113,13 +114,11 @@ As your tagging maturity improves, you might graduate optional tags to required 
 
 When your policy is ready, the Download button in the editor offers multiple formats:
 
-**JSON** exports the native policy file. This format works with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp) and integrates with other automation tools. The filename reflects your provider (e.g., `aws-tagging-policy.json`, `gcp-label-policy.json`, `azure-tagging-policy.json`).
+**JSON** exports the native policy file. This format works with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp) and integrates with other automation tools. The filename reflects your provider (e.g., `aws-tagging-policy.json`, `gcp-label-policy.json`, `azure-tagging-policy.json`). For GCP policies, this is the primary export format — see [How It Works for GCP](#how-it-works-for-gcp).
 
 **Markdown** generates a human-readable document you can share with teams, include in wikis, or add to onboarding documentation. Always available regardless of provider.
 
 **AWS Tag Policy** (shown for AWS policies) exports a policy ready to paste into AWS Organizations. The generator automatically converts your resource selections into the correct AWS syntax.
-
-**GCP Label Policy** (shown for GCP policies) exports to GCP Label Policy JSON format. Keys are automatically lowercased and lengths are capped at 63 characters.
 
 **Azure Policy Initiative** (shown for Azure policies) exports an Azure Policy Initiative with one policy definition per tag. Required tags use deny effect; optional tags use audit effect.
 
@@ -161,7 +160,7 @@ Tags for `MaintenanceWindow`, `BackupSchedule`, `AutoShutdown`, or `DataClassifi
 
 Policies are not saved automatically or stored anywhere. This is intentional: your tagging strategy is yours, and nothing is transmitted to external servers.
 
-Use the Download button to save your work as JSON or Markdown. To continue editing later, you can re-import the JSON file using any of the import features on the start screen (AWS, GCP, or Azure). They all accept the generator's native JSON format as well as their respective native cloud formats.
+Use the Download button to save your work as JSON or Markdown. To continue editing later, you can re-import the JSON file using the import features on the start screen (AWS or Azure). They accept the generator's native JSON format as well as their respective native cloud formats. For GCP policies, simply open the saved JSON file, copy its contents, and start a new GCP policy from scratch — the JSON format preserves all your settings.
 
 ---
 
@@ -203,11 +202,24 @@ GCP uses **labels** — key-value pairs attached to resources. Labels have stric
 - Keys and values each have a **maximum of 63 characters**
 - Convention is snake_case (e.g., `cost_center`, `business_unit`, `environment`)
 
-The generator automatically lowercases any uppercase characters in label keys when exporting to GCP format.
+### Why There's No GCP Import/Export
+
+Unlike AWS (which has Organizations Tag Policies) and Azure (which has Policy Initiatives), **GCP does not have a native label policy format** that you can upload to the GCP console to enforce labeling rules. GCP labels are applied directly to resources — there is no central policy document you load into GCP that says "these labels are required on these resources."
+
+This means the GCP policy you build in this tool is not meant to be uploaded to GCP. Instead, it serves as the **source of truth for your labeling standards**, and is designed to be used with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp). The MCP Server reads your policy JSON, scans your GCP project for resources, and reports which ones are missing required labels or have invalid values.
+
+**Your workflow for GCP:**
+
+1. **Build your label policy** in this tool — define which labels are required, what values are acceptable, and which resource types need them
+2. **Export as JSON** — this is the only export format for GCP (there's no native format to convert to)
+3. **Use with the MCP Server** — the server checks your GCP resources against the policy and reports compliance gaps
+4. **Share as Markdown** — generate a human-readable document for your engineering teams so they know what labels to apply
+
+The policy should mirror the labeling conventions your team actually uses in GCP. If your team already applies `cost_center` and `environment` labels to Compute Engine instances, your policy should reflect exactly those label keys and resource types.
 
 ### Supported Resource Types (39 types)
 
-The generator supports 39 GCP resource types organized by FinOps spend impact:
+The generator supports 39 GCP resource types organized by FinOps spend impact. Only resources that support GCP labels and carry meaningful costs are included. Resource types use the full URI format (`service.googleapis.com/ResourceType`).
 
 | Category | Resources |
 |----------|-----------|
@@ -218,14 +230,6 @@ The generator supports 39 GCP resource types organized by FinOps spend impact:
 | **Networking** (Often overlooked) | `compute.googleapis.com/ForwardingRule`, `compute.googleapis.com/Network`, `compute.googleapis.com/Subnetwork`, `compute.googleapis.com/Router`, `compute.googleapis.com/VpnGateway`, `compute.googleapis.com/VpnTunnel`, `compute.googleapis.com/Interconnect`, `compute.googleapis.com/InterconnectAttachment`, `compute.googleapis.com/BackendService` |
 | **Analytics** (Data & streaming) | `bigquery.googleapis.com/Dataset`, `bigquery.googleapis.com/Table`, `dataflow.googleapis.com/Job`, `dataproc.googleapis.com/Cluster`, `pubsub.googleapis.com/Topic`, `pubsub.googleapis.com/Subscription`, `dataprocmetastore.googleapis.com/Service` |
 | **Security & Operations** | `cloudkms.googleapis.com/KeyRing`, `secretmanager.googleapis.com/Secret`, `logging.googleapis.com/LogBucket` |
-
-GCP resource types use the full URI format (`service.googleapis.com/ResourceType`). Only resources that support GCP labels and carry meaningful costs are included.
-
-### GCP Export Format
-
-The GCP Label Policy JSON format includes each label with its key, description, allowed values, enforced resource types, and whether it's required. This is a custom format designed for import/export — GCP does not have a direct equivalent to AWS Organizations Tag Policies.
-
-**Limitations:** GCP Label Policies do not support regex validation. Keys are auto-lowercased on export, and lengths are capped at 63 characters. The generator warns you about any features that won't carry over.
 
 ---
 
