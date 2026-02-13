@@ -19,13 +19,13 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
   const isDark = theme === 'dark';
   const resourceCategories = getResourceCategories(cloudProvider);
   const allResourceTypes = getResourceTypes(cloudProvider);
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [testRegexInput, setTestRegexInput] = useState('');
   const [regexTestResult, setRegexTestResult] = useState<boolean | null>(null);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(resourceCategories.map(c => c.name)));
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    setExpandedCategories(new Set(getResourceCategories(cloudProvider).map(c => c.name)));
+    setExpandedCategories(new Set());
   }, [cloudProvider]);
 
   const handleAllowedValuesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
