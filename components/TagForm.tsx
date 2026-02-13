@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { RequiredTag, OptionalTag, AWS_RESOURCE_TYPES, RESOURCE_CATEGORIES } from '../types';
+import React, { useState, useEffect } from 'react';
+import { RequiredTag, OptionalTag, CloudProvider, getResourceCategories, getResourceTypes } from '../types';
 import { Input, TextArea, Checkbox } from './Input';
 import { Button } from './Button';
 import { useTheme } from '../context/ThemeContext';
@@ -8,18 +8,25 @@ import { Trash2, ChevronDown, ChevronUp, AlertCircle, CheckCircle, ChevronRight 
 interface TagFormProps {
   tag: RequiredTag | OptionalTag;
   isRequired: boolean;
+  cloudProvider: CloudProvider;
   onChange: (updatedTag: RequiredTag | OptionalTag) => void;
   onRemove: () => void;
   index: number;
 }
 
-export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onRemove, index }) => {
+export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider, onChange, onRemove, index }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const resourceCategories = getResourceCategories(cloudProvider);
+  const allResourceTypes = getResourceTypes(cloudProvider);
   const [isExpanded, setIsExpanded] = useState(true);
   const [testRegexInput, setTestRegexInput] = useState('');
   const [regexTestResult, setRegexTestResult] = useState<boolean | null>(null);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(RESOURCE_CATEGORIES.map(c => c.name)));
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(resourceCategories.map(c => c.name)));
+
+  useEffect(() => {
+    setExpandedCategories(new Set(getResourceCategories(cloudProvider).map(c => c.name)));
+  }, [cloudProvider]);
 
   const handleAllowedValuesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -46,12 +53,12 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
     if (!isRequired) return;
     onChange({
       ...tag,
-      applies_to: checked ? [...AWS_RESOURCE_TYPES] : []
+      applies_to: checked ? [...allResourceTypes] : []
     } as RequiredTag);
   };
 
   const isAllSelected = isRequired &&
-    (tag as RequiredTag).applies_to.length === AWS_RESOURCE_TYPES.length;
+    (tag as RequiredTag).applies_to.length === allResourceTypes.length;
 
   const toggleCategory = (categoryName: string) => {
     setExpandedCategories(prev => {
@@ -143,7 +150,7 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
         <div className={`p-4 space-y-4 ${isDark ? 'border-t border-white/10' : 'border-t border-gray-200'}`}>
           <Input
             label="Tag Name"
-            placeholder="e.g. CostCenter"
+            placeholder={cloudProvider === 'gcp' ? 'e.g. cost_center' : 'e.g. CostCenter'}
             value={tag.name}
             onChange={(e) => onChange({ ...tag, name: e.target.value })}
             error={!tag.name}
@@ -208,7 +215,7 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
                   />
                 </div>
                 <div className={`rounded overflow-hidden ${isDark ? 'bg-black/20 border border-white/5' : 'bg-gray-50 border border-gray-200'}`}>
-                  {RESOURCE_CATEGORIES.map((category) => {
+                  {resourceCategories.map((category) => {
                     const isOpen = expandedCategories.has(category.name);
                     const isFullySelected = isCategoryFullySelected(category.resources);
                     const isPartiallySelected = isCategoryPartiallySelected(category.resources);
@@ -254,7 +261,7 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
                         </div>
                         {/* Category Resources */}
                         {isOpen && (
-                          <div className={`grid grid-cols-2 gap-1 px-3 pb-2 pt-1 ${isDark ? 'bg-black/20' : 'bg-white/50'}`}>
+                          <div className={`grid ${cloudProvider === 'gcp' || cloudProvider === 'azure' ? 'grid-cols-1' : 'grid-cols-2'} gap-1 px-3 pb-2 pt-1 ${isDark ? 'bg-black/20' : 'bg-white/50'}`}>
                             {category.resources.map(resource => (
                               <Checkbox
                                 key={resource}

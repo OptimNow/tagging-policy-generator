@@ -44,6 +44,7 @@ export function convertAwsPolicyToMcp(awsPolicyString: string): Policy {
   return {
     version: "1.0",
     last_updated: new Date().toISOString(),
+    cloud_provider: 'aws' as const,
     required_tags: requiredTags,
     optional_tags: optionalTags,
     tag_naming_rules: {
