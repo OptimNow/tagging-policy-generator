@@ -12,7 +12,7 @@ The FinOps Tagging Policy Generator helps you define tagging policies that answe
 
 Without consistent tagging, your cost reports are filled with "unallocated" spend. Finance can't charge back to the right departments. Engineering can't identify which services are driving costs. Nobody can answer "how much does Project X actually cost us?"
 
-This tool solves that problem by letting you visually build tagging policies that specify which tags (or labels, in GCP terminology) are required, what values are acceptable, and which resources need them. The output is a JSON policy file you can use with compliance checking tools, export to your cloud provider's native format (AWS Organizations Tag Policy, GCP Label Policy, or Azure Policy Initiative), or share with your teams as documentation.
+This tool solves that problem by letting you visually build tagging policies that specify which tags (or labels, in GCP terminology) are required, what values are acceptable, and which resources need them. The output is a JSON policy file you can use with compliance checking tools, export to your cloud provider's native format (AWS Organizations Tag Policy or Azure Policy Initiative), or share with your teams as documentation.
 
 Everything runs in your browser. No data leaves your machine, no API keys required, no backend to worry about.
 
@@ -242,9 +242,113 @@ Azure uses **tags** — key-value pairs attached to resources. Azure tags have t
 - Each resource can have at most **50 tags**
 - Convention is typically PascalCase (e.g., `CostCenter`, `Environment`, `Owner`)
 
+### Azure Labels vs Tags vs Policy Tags
+
+Azure has several tagging-related concepts — make sure you use the right one:
+
+- **Tags** (in the Azure Portal on each resource) — key-value pairs for cost allocation and organization. These appear in your billing exports and Cost Management. **This is what our tool targets.**
+- **Tags** (in IAM / Resource Manager) — used for access control conditions and RBAC policies. Different purpose from cost attribution tags.
+- **Policy Tags** (in Azure Purview / Data Catalog) — for data governance and classification. Not related to cost attribution.
+
+For FinOps purposes, you enforce tagging through **Azure Policy**, which can deny or audit resource creation based on whether required tags are present.
+
+### Your Workflow for Azure
+
+Unlike GCP (which has no native policy format), Azure Policy lets you enforce tagging directly. Here's the end-to-end workflow:
+
+#### 1. Build Your Policy in the Generator
+
+1. Open the tool and select **Azure** as your cloud provider
+2. Choose a template (e.g., **Cost Allocation** or **Minimal Starter**) or start blank
+3. Configure your required tags — name, description, allowed values, and which resource types they apply to
+4. Click **Download → Azure Policy** to get the exported Azure Policy Initiative JSON
+
+The exported file contains one policy definition per tag, with `deny` effect for required tags and `audit` effect for optional tags. Keep it as reference for the next step.
+
+#### 2. Create Policy Definitions in Azure Portal
+
+Azure doesn't accept a single policy file upload. Instead, you create each policy definition individually. For each required tag in your export:
+
+1. Go to **Azure Portal** → search for **Policy** → click **Definitions**
+2. Click **+ Policy definition**
+3. Fill in the basics:
+   - **Definition location**: Select your subscription (click the `...` button)
+   - **Name**: e.g., `Require CostCenter tag on resources`
+   - **Description**: Copy from the exported file
+   - **Category**: Create new → `FinOps` (or use existing → `Tags`)
+
+4. In the **Policy Rule** editor, paste the complete JSON block for that tag. The editor expects a single JSON object containing `mode`, `parameters`, and `policyRule` together:
+
+```json
+{
+  "mode": "Indexed",
+  "parameters": {
+    "tagName": {
+      "type": "String",
+      "metadata": {
+        "displayName": "Tag Name",
+        "description": "Name of the tag to enforce"
+      },
+      "defaultValue": "CostCenter"
+    }
+  },
+  "policyRule": {
+    "if": {
+      "field": "[concat('tags[', parameters('tagName'), ']')]",
+      "exists": "false"
+    },
+    "then": {
+      "effect": "deny"
+    }
+  }
+}
+```
+
+5. Click **Save**
+6. Repeat for each tag, changing the `defaultValue` and the effect (`deny` for required, `audit` for optional)
+
+> **Important:** The Policy Rule editor is a single JSON editor — `parameters` and `policyRule` go in the same block, not in separate fields.
+
+#### 3. Assign the Policy
+
+1. Go to **Policy → Assignments**
+2. Click **Assign policy**
+3. **Scope**: Select your subscription or a specific resource group (use a test resource group first!)
+4. **Policy definition**: Search for the definition you just created
+5. Leave parameters as defaults
+6. Click **Review + create** → **Create**
+
+#### 4. Test the Enforcement
+
+- Try creating a resource (e.g., a Storage Account) **without** the required tag → Azure should **deny** the request
+- Try again **with** the required tag → the creation should succeed
+- For `audit` effect policies, resources will be created but flagged as non-compliant in the Policy compliance dashboard
+
+#### 5. Optional: Group into an Initiative
+
+Once you have multiple policy definitions, you can group them into an **Initiative** (Policy Set):
+
+1. Go to **Policy → Definitions** → click **+ Initiative definition**
+2. Add each of your tag policy definitions to the initiative
+3. Assign the initiative instead of individual policies
+
+This makes it easier to manage all your FinOps tagging rules as a single unit.
+
+### Importing an Existing Azure Policy
+
+If you already have Azure Policy definitions for tagging, you can import them into the generator:
+
+1. In Azure Portal, go to **Policy → Definitions** → find your policy
+2. Click the policy → click **Policy JSON** (or **JSON View**)
+3. Copy the JSON
+4. In the generator start screen, paste it in the **Import Azure Policy** tile
+5. The generator converts it to its format for editing
+
+The importer understands both single policy definitions and full initiative JSON with `policyDefinitions` arrays.
+
 ### Supported Resource Types (89 types)
 
-The generator supports 89 Azure resource types organized across 11 categories. Only resources where both "Supports tags" and "Tag in cost report" are true are included.
+The generator supports 89 Azure resource types organized across 11 categories. Only resources where both "Supports tags" and "Tag in cost report" are true (per [Azure documentation](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/tag-support)) are included.
 
 | Category | Count | Example Resource Types |
 |----------|-------|----------------------|
@@ -262,19 +366,17 @@ The generator supports 89 Azure resource types organized across 11 categories. O
 
 Azure resource types use the `Microsoft.*` namespace format (e.g., `Microsoft.Compute/virtualMachines`). The full list of all 89 resource types is available in the tool's resource picker.
 
-### Azure Export Format
+### Tag Inheritance
 
-The Azure Policy Initiative format generates one policy definition per tag:
+The exported file includes recommendations for four built-in Azure Policies that automatically inherit tags from resource groups and subscriptions. These are especially useful for managed resource groups (AKS, Databricks, Synapse, Azure ML) where you cannot directly tag the resources inside them. Look for the `tagInheritanceRecommendations` section in your exported JSON.
 
-- **Required tags** use `effect: 'deny'` — blocking resource creation without the tag
-- **Optional tags** use `effect: 'audit'` — logging non-compliance without blocking
+### Limitations
 
-The export also includes:
-
-- **Tag inheritance recommendations** — four built-in Azure Policy IDs for automatically inheriting tags from resource groups and subscriptions
-- **Managed resource group notes** — services like AKS, Databricks, Synapse, Azure ML, Managed Applications, and App Service Environment create managed resource groups that have limited tagging support
-
-**Limitations:** Azure Policy does not support regex validation. Tag names have strict character restrictions and reserved prefix rules. Storage account names have a 24-character limit which can conflict with longer tag-based naming conventions. The generator warns you about any features that won't carry over.
+- Azure Policy does not support regex validation — only allowed value lists. If your policy uses regex patterns, these will not be preserved in the Azure export.
+- Tag names have strict character restrictions and reserved prefix rules.
+- Storage account names have a 24-character limit which can conflict with longer tag-based naming conventions.
+- Services that create managed resource groups (AKS, Databricks, Synapse, Azure ML, Managed Applications, App Service Environment) have limited tagging on resources inside those groups — use tag inheritance policies from the resource group level.
+- The generator warns you about any features that won't carry over during export.
 
 ---
 
