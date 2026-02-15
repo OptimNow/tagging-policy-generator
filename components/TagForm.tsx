@@ -3,7 +3,8 @@ import { RequiredTag, OptionalTag, CloudProvider, getResourceCategories, getReso
 import { Input, TextArea, Checkbox } from './Input';
 import { Button } from './Button';
 import { useTheme } from '../context/ThemeContext';
-import { Trash2, ChevronDown, ChevronUp, AlertCircle, CheckCircle, ChevronRight } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronUp, AlertCircle, CheckCircle, ChevronRight, Copy, Check } from 'lucide-react';
+import { generateAzurePortalJson } from '../services/azure-converter';
 
 interface TagFormProps {
   tag: RequiredTag | OptionalTag;
@@ -23,6 +24,7 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
   const [testRegexInput, setTestRegexInput] = useState('');
   const [regexTestResult, setRegexTestResult] = useState<boolean | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [azureCopied, setAzureCopied] = useState(false);
 
   useEffect(() => {
     setExpandedCategories(new Set());
@@ -118,6 +120,19 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
     }
   };
 
+  const handleCopyAzureJson = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const effect = isRequired ? 'deny' : 'audit';
+    const json = generateAzurePortalJson(tag.name, tag.description, effect, tag.allowed_values);
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(json, null, 2));
+      setAzureCopied(true);
+      setTimeout(() => setAzureCopied(false), 2000);
+    } catch {
+      setAzureCopied(false);
+    }
+  };
+
   return (
     <div className={`rounded-lg overflow-hidden mb-4 transition-all ${isDark ? 'bg-white/5 border border-white/10 hover:border-white/20' : 'bg-white border border-gray-200 hover:border-gray-300'}`}>
       {/* Header */}
@@ -133,6 +148,17 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
             {!tag.name && <span className="text-xs text-red-400 flex items-center gap-1"><AlertCircle size={12}/> Name required</span>}
         </div>
         <div className="flex items-center gap-2">
+            {cloudProvider === 'azure' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopyAzureJson}
+                className={azureCopied ? 'text-green-400' : 'text-purple-400 hover:text-purple-300 hover:bg-purple-500/10'}
+                title="Copy Azure Policy JSON"
+              >
+                {azureCopied ? <Check size={16} /> : <Copy size={16} />}
+              </Button>
+            )}
             <Button
                 variant="ghost"
                 size="sm"

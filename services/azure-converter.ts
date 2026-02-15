@@ -266,6 +266,23 @@ function buildPolicyDefinition(
   };
 }
 
+// Generate Azure Portal-ready JSON for a single tag definition.
+// This is the exact format you paste into the Azure Portal Policy Rule editor:
+// a single JSON object with mode, parameters, and policyRule together.
+export function generateAzurePortalJson(
+  tagName: string,
+  description: string,
+  effect: string,
+  allowedValues: string[] | null
+): Record<string, unknown> {
+  const def = buildPolicyDefinition(tagName, description, effect, allowedValues);
+  return {
+    mode: def.properties.mode,
+    parameters: def.properties.parameters,
+    policyRule: def.properties.policyRule,
+  };
+}
+
 // Export warnings for features that won't be preserved in Azure format
 export function getAzureExportWarnings(policy: Policy): string[] {
   const warnings: string[] = [];
