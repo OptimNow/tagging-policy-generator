@@ -153,10 +153,10 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
                 variant="ghost"
                 size="sm"
                 onClick={handleCopyAzureJson}
-                className={azureCopied ? 'text-green-400' : 'text-purple-400 hover:text-purple-300 hover:bg-purple-500/10'}
-                title="Copy Azure Policy JSON"
+                className={azureCopied ? 'text-white bg-green-600 hover:bg-green-600' : 'text-white bg-green-600 hover:bg-green-700'}
+                title="Copy Azure Policy JSON — paste directly into Azure Portal"
               >
-                {azureCopied ? <Check size={16} /> : <Copy size={16} />}
+                {azureCopied ? <><Check size={14} className="mr-1" /> Copied</> : <><Copy size={14} className="mr-1" /> Azure JSON</>}
               </Button>
             )}
             <Button

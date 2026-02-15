@@ -263,7 +263,9 @@ Unlike GCP (which has no native policy format), Azure Policy lets you enforce ta
 3. Configure your required tags — name, description, allowed values, and which resource types they apply to
 4. Click **Download → Azure Policy** to get the exported Azure Policy Initiative JSON
 
-The exported file contains one policy definition per tag, with `deny` effect for required tags and `audit` effect for optional tags. You can also use the **copy button** (clipboard icon) on each tag card in the editor to copy the Azure Portal-ready JSON for that specific tag directly to your clipboard — no need to extract it from the full export file.
+The exported file contains one policy definition per tag, with `deny` effect for required tags and `audit` effect for optional tags.
+
+**Recommended shortcut:** Each tag card in the editor has a green **"Azure JSON"** button in its header bar. Click it to copy the Azure Portal-ready JSON for that specific tag directly to your clipboard. The button turns to "Copied" briefly to confirm. You can then paste this JSON straight into the Azure Portal's Policy Rule editor — no need to open the exported file or extract anything manually.
 
 #### 2. Create Policy Definitions in Azure Portal
 
