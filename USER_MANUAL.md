@@ -254,32 +254,40 @@ For FinOps purposes, you enforce tagging through **Azure Policy**, which can den
 
 ### Your Workflow for Azure
 
-Unlike GCP (which has no native policy format), Azure Policy lets you enforce tagging directly. Here's the end-to-end workflow:
+Unlike GCP (which has no native policy format), Azure Policy lets you enforce tagging directly. Here's the end-to-end workflow.
+
+> **Video walkthrough:** Watch the short video below for a step-by-step demonstration of the Azure workflow.
+
+<!-- VIDEO PLACEHOLDER: Azure Policy walkthrough video -->
+
+**Key takeaway from the video:** With Azure, you create **one policy definition per tag** — this is different from AWS, where a single policy covers all tags. The generator's green **"Azure JSON"** button on each tag card makes this easy: click it to copy the ready-to-paste JSON for that tag, then create the corresponding policy definition in Azure Portal. Once all your tag policies are defined, you assign them to your subscription or resource group, and Azure will deny (for required tags) or audit (for optional tags) any resource that doesn't comply.
+
+Here's the workflow in detail:
 
 #### 1. Build Your Policy in the Generator
 
 1. Open the tool and select **Azure** as your cloud provider
-2. Choose a template (e.g., **Cost Allocation** or **Minimal Starter**) or start blank
+2. Choose a template (e.g., **Cost Allocation**) or start blank
 3. Configure your required tags — name, description, allowed values, and which resource types they apply to
-4. Click **Download → Azure Policy** to get the exported Azure Policy Initiative JSON
+4. For each tag, click the green **"Azure JSON"** button on the tag card to copy the Azure Portal-ready JSON to your clipboard
 
-The exported file contains one policy definition per tag, with `deny` effect for required tags and `audit` effect for optional tags.
+Each tag generates its own standalone JSON block — this is by design, because Azure requires one policy definition per tag (unlike AWS where all tags are in a single policy).
 
-**Recommended shortcut:** Each tag card in the editor has a green **"Azure JSON"** button in its header bar. Click it to copy the Azure Portal-ready JSON for that specific tag directly to your clipboard. The button turns to "Copied" briefly to confirm. You can then paste this JSON straight into the Azure Portal's Policy Rule editor — no need to open the exported file or extract anything manually.
+> **Tip:** You can also click **Download → Azure Policy** to get all tags exported as a single Azure Policy Initiative file. But for day-to-day use, the per-tag **Azure JSON** button is faster — copy, paste into Portal, done.
 
 #### 2. Create Policy Definitions in Azure Portal
 
-Azure doesn't accept a single policy file upload. Instead, you create each policy definition individually. For each required tag in your export:
+In Azure, you create **one policy definition per tag**. For each tag:
 
 1. Go to **Azure Portal** → search for **Policy** → click **Definitions**
 2. Click **+ Policy definition**
 3. Fill in the basics:
    - **Definition location**: Select your subscription (click the `...` button)
-   - **Name**: e.g., `Require CostCenter tag on resources`
-   - **Description**: Copy from the exported file
-   - **Category**: Create new → `FinOps` (or use existing → `Tags`)
+   - **Name**: e.g., `Policy for CostCenter` — use one policy per tag
+   - **Description**: (optional) describe the tag's purpose
+   - **Category**: Create new (e.g., `FinOps`) or use existing (e.g., `Tags`)
 
-4. In the **Policy Rule** editor, paste the complete JSON block for that tag. The editor expects a single JSON object containing `mode`, `parameters`, and `policyRule` together:
+4. In the **Policy Rule** editor, **replace the entire default JSON** with the JSON you copied from the generator's Azure JSON button. The editor expects a single JSON object containing `mode`, `parameters`, and `policyRule` together:
 
 ```json
 {
@@ -292,12 +300,28 @@ Azure doesn't accept a single policy file upload. Instead, you create each polic
         "description": "Name of the tag to enforce"
       },
       "defaultValue": "CostCenter"
+    },
+    "allowedValues": {
+      "type": "Array",
+      "metadata": {
+        "displayName": "Allowed Values",
+        "description": "List of allowed tag values"
+      },
+      "defaultValue": ["Engineering", "Sales", "Marketing"]
     }
   },
   "policyRule": {
     "if": {
-      "field": "[concat('tags[', parameters('tagName'), ']')]",
-      "exists": "false"
+      "anyOf": [
+        {
+          "field": "[concat('tags[', parameters('tagName'), ']')]",
+          "exists": "false"
+        },
+        {
+          "field": "[concat('tags[', parameters('tagName'), ']')]",
+          "notIn": "[parameters('allowedValues')]"
+        }
+      ]
     },
     "then": {
       "effect": "deny"
@@ -306,19 +330,25 @@ Azure doesn't accept a single policy file upload. Instead, you create each polic
 }
 ```
 
+This JSON enforces two things: the tag must exist on the resource, **and** its value must be one of the allowed values. If you don't specify allowed values in the generator, the JSON will only enforce tag existence.
+
 5. Click **Save**
-6. Repeat for each tag, changing the `defaultValue` and the effect (`deny` for required, `audit` for optional)
+6. **Repeat for each tag** — go back to the generator, click "Azure JSON" on the next tag, and create another policy definition in Azure Portal
 
 > **Important:** The Policy Rule editor is a single JSON editor — `parameters` and `policyRule` go in the same block, not in separate fields.
 
 #### 3. Assign the Policy
 
-1. Go to **Policy → Assignments**
-2. Click **Assign policy**
-3. **Scope**: Select your subscription or a specific resource group (use a test resource group first!)
-4. **Policy definition**: Search for the definition you just created
-5. Leave parameters as defaults
+Once a policy definition is saved, you need to assign it for it to take effect:
+
+1. Go to **Policy → Definitions** → find the definition you just created
+2. Click on it → click **Assign**
+3. **Scope**: Select your subscription or a specific resource group (you can also exclude certain scopes)
+4. **Policy definition**: Should already be pre-filled with the one you selected
+5. Add a description if desired
 6. Click **Review + create** → **Create**
+
+The policy is now active. Any new resource created within the scope must comply with the tag requirement.
 
 #### 4. Test the Enforcement
 
