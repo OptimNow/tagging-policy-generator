@@ -258,7 +258,7 @@ Unlike GCP (which has no native policy format), Azure Policy lets you enforce ta
 
 > **Video walkthrough:** Watch the short video below for a step-by-step demonstration of the Azure workflow.
 
-<!-- VIDEO PLACEHOLDER: Azure Policy walkthrough video -->
+<https://www.loom.com/share/4df5b16ee04a4edfa16470177a77ceeb>
 
 **Key takeaway from the video:** With Azure, you create **one policy definition per tag** — this is different from AWS, where a single policy covers all tags. The generator's green **"Azure JSON"** button on each tag card makes this easy: click it to copy the ready-to-paste JSON for that tag, then create the corresponding policy definition in Azure Portal. Once all your tag policies are defined, you assign them to your subscription or resource group, and Azure will deny (for required tags) or audit (for optional tags) any resource that doesn't comply.
 
