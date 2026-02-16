@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Policy, RequiredTag, OptionalTag } from './types';
+import { Policy, RequiredTag, OptionalTag, CloudProvider } from './types';
 import { TEMPLATES } from './services/templates';
 import { validatePolicy } from './services/validator';
 import { convertAwsPolicyToMcp, convertMcpToAwsPolicy, getAwsExportWarnings } from './services/converter';
-import { downloadJson, downloadMarkdown, downloadAwsPolicy } from './services/exporter';
+import { convertAzurePolicyToMcp, convertMcpToAzurePolicy, getAzureExportWarnings } from './services/azure-converter';
+import { downloadJson, downloadMarkdown, downloadAwsPolicy, downloadAzurePolicy } from './services/exporter';
 import { Button } from './components/Button';
 import { Input, Checkbox } from './components/Input';
 import { TagForm } from './components/TagForm';
@@ -13,6 +14,7 @@ import { Plus, Download, Upload, Copy, LayoutTemplate, ArrowRight, AlertTriangle
 const INITIAL_POLICY: Policy = {
   version: "1.0",
   last_updated: new Date().toISOString(),
+  cloud_provider: 'aws',
   required_tags: [],
   optional_tags: [],
   tag_naming_rules: {
@@ -23,17 +25,37 @@ const INITIAL_POLICY: Policy = {
   }
 };
 
+const GCP_NAMING_RULES = {
+  case_sensitivity: false,
+  allow_special_characters: false,
+  max_key_length: 63,
+  max_value_length: 63
+};
+
+const AZURE_NAMING_RULES = {
+  case_sensitivity: false,
+  allow_special_characters: false,
+  max_key_length: 512,
+  max_value_length: 256
+};
+
 type ViewState = 'start' | 'editor';
 
 const App: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
   const [view, setViewState] = useState<ViewState>('start');
   const [policy, setPolicy] = useState<Policy>(INITIAL_POLICY);
+  const [selectedProvider, setSelectedProvider] = useState<CloudProvider>('aws');
   const [awsImportText, setAwsImportText] = useState('');
   const [awsExportText, setAwsExportText] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState(false);
+  const [azureImportText, setAzureImportText] = useState('');
+  const [azureExportText, setAzureExportText] = useState('');
+  const [azureImportError, setAzureImportError] = useState<string | null>(null);
+  const [azureExportError, setAzureExportError] = useState<string | null>(null);
+  const [azureExportSuccess, setAzureExportSuccess] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
@@ -61,8 +83,10 @@ const App: React.FC = () => {
       }
     };
 
-    // Set initial state
-    window.history.replaceState({ view: 'start' }, '', '#');
+    // Set initial state, respecting direct navigation to #editor
+    const initialView = window.location.hash === '#editor' ? 'editor' : 'start';
+    setViewState(initialView);
+    window.history.replaceState({ view: initialView }, '', window.location.hash || '#');
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -82,29 +106,32 @@ const App: React.FC = () => {
   // Update validation whenever policy changes
   useEffect(() => {
     if (view === 'editor') {
-      const errors = validatePolicy(policy);
-      setValidationErrors(errors);
-      // Update timestamp
-      setPolicy(prev => ({ ...prev, last_updated: new Date().toISOString() }));
+      setValidationErrors(validatePolicy(policy));
     }
   }, [policy, view]);
 
   // Handle Template Selection
-  const applyTemplate = (templateName: string) => {
-    const template = TEMPLATES.find(t => t.name === templateName);
+  const applyTemplate = (templateName: string, provider?: CloudProvider) => {
+    const targetProvider = provider || selectedProvider;
+    const template = TEMPLATES.find(t => t.name === templateName && t.provider === targetProvider);
     if (template) {
       setPolicy({
         version: INITIAL_POLICY.version,
         last_updated: new Date().toISOString(),
+        cloud_provider: template.provider,
         required_tags: template.policy.required_tags ? [...template.policy.required_tags] : [],
         optional_tags: template.policy.optional_tags ? [...template.policy.optional_tags] : [],
-        tag_naming_rules: { ...INITIAL_POLICY.tag_naming_rules }
+        tag_naming_rules: template.provider === 'gcp'
+          ? { ...GCP_NAMING_RULES }
+          : template.provider === 'azure'
+            ? { ...AZURE_NAMING_RULES }
+            : { ...INITIAL_POLICY.tag_naming_rules }
       });
       setView('editor');
     }
   };
 
-  // Handle Import
+  // Handle AWS Import
   const handleImport = () => {
     try {
       const converted = convertAwsPolicyToMcp(awsImportText);
@@ -120,8 +147,8 @@ const App: React.FC = () => {
     }
   };
 
-  // Handle Export (convert pasted JSON policy to AWS format)
-  const handleExportConvert = () => {
+  // Handle AWS Export (convert pasted JSON policy to AWS format)
+  const handleExportConvert = async () => {
     try {
       const parsed = JSON.parse(awsExportText);
       // Check if it has the expected structure
@@ -132,7 +159,7 @@ const App: React.FC = () => {
       const awsJson = JSON.stringify(awsPolicy, null, 2);
 
       // Copy to clipboard
-      navigator.clipboard.writeText(awsJson);
+      await navigator.clipboard.writeText(awsJson);
       setExportError(null);
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 3000);
@@ -143,6 +170,46 @@ const App: React.FC = () => {
         setExportError("Unknown error occurred during export");
       }
       setExportSuccess(false);
+    }
+  };
+
+  // Handle Azure Import
+  const handleAzureImport = () => {
+    try {
+      const converted = convertAzurePolicyToMcp(azureImportText);
+      setPolicy(converted);
+      setAzureImportError(null);
+      setView('editor');
+    } catch (e) {
+      if (e instanceof Error) {
+        setAzureImportError(e.message);
+      } else {
+        setAzureImportError("Unknown error occurred during import");
+      }
+    }
+  };
+
+  // Handle Azure Export (convert pasted JSON policy to Azure Policy format)
+  const handleAzureExportConvert = async () => {
+    try {
+      const parsed = JSON.parse(azureExportText);
+      if (!parsed.required_tags && !parsed.optional_tags) {
+        throw new Error("Invalid policy format. Expected required_tags or optional_tags.");
+      }
+      const azurePolicy = convertMcpToAzurePolicy(parsed as Policy);
+      const azureJson = JSON.stringify(azurePolicy, null, 2);
+
+      await navigator.clipboard.writeText(azureJson);
+      setAzureExportError(null);
+      setAzureExportSuccess(true);
+      setTimeout(() => setAzureExportSuccess(false), 3000);
+    } catch (e) {
+      if (e instanceof Error) {
+        setAzureExportError(e.message);
+      } else {
+        setAzureExportError("Unknown error occurred during export");
+      }
+      setAzureExportSuccess(false);
     }
   };
 
@@ -203,14 +270,17 @@ const App: React.FC = () => {
     });
   };
 
+  // Stamp last_updated at export-time, not during editing
+  const policyForExport = (): Policy => ({ ...policy, last_updated: new Date().toISOString() });
+
   // Export
   const handleDownloadJson = () => {
-    downloadJson(policy);
+    downloadJson(policyForExport());
     setShowDownloadMenu(false);
   };
 
   const handleDownloadMarkdown = () => {
-    downloadMarkdown(policy);
+    downloadMarkdown(policyForExport());
     setShowDownloadMenu(false);
   };
 
@@ -222,15 +292,33 @@ const App: React.FC = () => {
       );
       if (!proceed) return;
     }
-    downloadAwsPolicy(policy);
+    downloadAwsPolicy(policyForExport());
     setShowDownloadMenu(false);
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(JSON.stringify(policy, null, 2));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleDownloadAzurePolicy = () => {
+    const warnings = getAzureExportWarnings(policy);
+    if (warnings.length > 0) {
+      const proceed = window.confirm(
+        `Note: Some features will not be preserved in Azure Policy format:\n\n${warnings.join('\n')}\n\nContinue with export?`
+      );
+      if (!proceed) return;
+    }
+    downloadAzurePolicy(policyForExport());
+    setShowDownloadMenu(false);
   };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(policyForExport(), null, 2));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const filteredTemplates = TEMPLATES.filter(t => t.provider === selectedProvider);
 
   // --- Views ---
 
@@ -274,7 +362,7 @@ const App: React.FC = () => {
             <div className="text-center mb-8">
               <h1 className="text-3xl md:text-4xl font-bold mb-4">FinOps Tagging Policy Generator</h1>
               <p className={`max-w-lg mx-auto ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                Create, validate, and export tagging policies for cloud cost attribution.
+                Create, validate, and export tagging policies for AWS, GCP, and Azure cloud cost attribution.
                 Pure client-side, secure, and ready for MCP.
               </p>
             </div>
@@ -289,18 +377,72 @@ const App: React.FC = () => {
               </div>
               <div className="flex-1">
                 <h2 className="text-xl font-bold mb-2">Create from Scratch</h2>
-                <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                   Start with a blank canvas or use a template to build your policy step-by-step.
                 </p>
+
+                {/* Cloud Provider Toggle */}
+                <div className="flex items-center gap-1 mb-4">
+                  <button
+                    onClick={() => setSelectedProvider('aws')}
+                    className={`px-4 py-1.5 rounded-l-lg text-sm font-medium transition-colors border ${
+                      selectedProvider === 'aws'
+                        ? 'bg-chartreuse text-charcoal border-chartreuse'
+                        : isDark
+                          ? 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                          : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    AWS
+                  </button>
+                  <button
+                    onClick={() => setSelectedProvider('gcp')}
+                    className={`px-4 py-1.5 text-sm font-medium transition-colors border ${
+                      selectedProvider === 'gcp'
+                        ? 'bg-chartreuse text-charcoal border-chartreuse'
+                        : isDark
+                          ? 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                          : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    GCP
+                  </button>
+                  <button
+                    onClick={() => setSelectedProvider('azure')}
+                    className={`px-4 py-1.5 rounded-r-lg text-sm font-medium transition-colors border ${
+                      selectedProvider === 'azure'
+                        ? 'bg-chartreuse text-charcoal border-chartreuse'
+                        : isDark
+                          ? 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                          : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    Azure
+                  </button>
+                </div>
+
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <Button onClick={() => { setPolicy({...INITIAL_POLICY, last_updated: new Date().toISOString()}); setView('editor'); }} className="justify-between group">
-                    Start Blank <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform"/>
+                  <Button onClick={() => {
+                    const newPolicy: Policy = {
+                      ...INITIAL_POLICY,
+                      cloud_provider: selectedProvider,
+                      last_updated: new Date().toISOString(),
+                      tag_naming_rules: selectedProvider === 'gcp'
+                        ? { ...GCP_NAMING_RULES }
+                        : selectedProvider === 'azure'
+                          ? { ...AZURE_NAMING_RULES }
+                          : { ...INITIAL_POLICY.tag_naming_rules }
+                    };
+                    setPolicy(newPolicy);
+                    setView('editor');
+                  }} className="justify-between group">
+                    Start Blank ({selectedProvider.toUpperCase()}) <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform"/>
                   </Button>
                   <div className="flex flex-wrap gap-2">
-                    {TEMPLATES.map(t => (
+                    {filteredTemplates.map(t => (
                       <button
-                        key={t.name}
-                        onClick={() => applyTemplate(t.name)}
+                        key={`${t.provider}-${t.name}`}
+                        onClick={() => applyTemplate(t.name, t.provider)}
                         className={`flex items-center gap-2 px-4 py-2 rounded text-sm transition-colors border ${isDark ? 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20' : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'}`}
                       >
                         <LayoutTemplate size={14} className="text-gray-400" />
@@ -313,14 +455,14 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Import/Export Row */}
+          {/* Import/Export Rows — paired by provider */}
           <div className="grid md:grid-cols-2 gap-8">
 
-            {/* Option 2: Import from AWS Policy */}
+            {/* AWS Import */}
             <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
               <div className="flex items-start gap-4 mb-4">
-                <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                  <Upload className="text-blue-400" />
+                <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                  <Upload className="text-orange-400" />
                 </div>
                 <div className="flex-1">
                   <h2 className="text-xl font-bold">Import AWS Policy</h2>
@@ -345,11 +487,11 @@ const App: React.FC = () => {
               </Button>
             </div>
 
-            {/* Option 3: Export to AWS Policy */}
+            {/* AWS Export */}
             <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
               <div className="flex items-start gap-4 mb-4">
-                <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0">
-                  <Download className="text-green-400" />
+                <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                  <Download className="text-orange-400" />
                 </div>
                 <div className="flex-1">
                   <h2 className="text-xl font-bold">Export to AWS Policy</h2>
@@ -375,6 +517,69 @@ const App: React.FC = () => {
                 </div>
               )}
               <Button variant="secondary" onClick={handleExportConvert} className="w-full" disabled={!awsExportText.trim()}>
+                <Download size={14} className="mr-2" /> Convert & Copy
+              </Button>
+            </div>
+
+            {/* Azure Import */}
+            <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
+              <div className="flex items-start gap-4 mb-4">
+                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                  <Upload className="text-purple-400" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold">Import Azure Policy</h2>
+                  <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Paste an Azure Policy Initiative JSON to convert it to our format.
+                  </p>
+                </div>
+              </div>
+              <textarea
+                className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
+                placeholder='{"policyDefinitions": [{ ... }]}'
+                value={azureImportText}
+                onChange={(e) => setAzureImportText(e.target.value)}
+              />
+              {azureImportError && (
+                <div className="w-full p-2 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs flex items-center gap-2">
+                  <AlertTriangle size={12} /> {azureImportError}
+                </div>
+              )}
+              <Button variant="secondary" onClick={handleAzureImport} className="w-full" disabled={!azureImportText.trim()}>
+                <Upload size={14} className="mr-2" /> Import & Edit
+              </Button>
+            </div>
+
+            {/* Azure Export */}
+            <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all flex flex-col ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
+              <div className="flex items-start gap-4 mb-4">
+                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                  <Download className="text-purple-400" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold">Export to Azure Policy</h2>
+                  <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Paste a policy JSON to convert it to Azure Policy Initiative format.
+                  </p>
+                </div>
+              </div>
+              <textarea
+                className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
+                placeholder='{"version": "1.0", "required_tags": [...] }'
+                value={azureExportText}
+                onChange={(e) => setAzureExportText(e.target.value)}
+              />
+              {azureExportError && (
+                <div className="w-full p-2 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs flex items-center gap-2">
+                  <AlertTriangle size={12} /> {azureExportError}
+                </div>
+              )}
+              {azureExportSuccess && (
+                <div className="w-full p-2 mb-4 bg-green-500/10 border border-green-500/20 rounded text-green-400 text-xs flex items-center gap-2">
+                  <CheckCircle size={12} /> Azure Policy Initiative copied to clipboard!
+                </div>
+              )}
+              <Button variant="secondary" onClick={handleAzureExportConvert} className="w-full" disabled={!azureExportText.trim()}>
                 <Download size={14} className="mr-2" /> Convert & Copy
               </Button>
             </div>
@@ -410,15 +615,26 @@ const App: React.FC = () => {
                />
              </button>
              <h1 className={`font-bold text-lg hidden sm:block ${isDark ? 'text-white' : 'text-charcoal'}`}>Policy Builder</h1>
+             <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+               policy.cloud_provider === 'gcp'
+                 ? 'bg-blue-500/20 text-blue-400'
+                 : policy.cloud_provider === 'azure'
+                   ? 'bg-purple-500/20 text-purple-400'
+                   : 'bg-orange-500/20 text-orange-400'
+             }`}>
+               {policy.cloud_provider.toUpperCase()}
+             </span>
           </div>
           <div className="flex items-center gap-2">
             <select
               className={`rounded px-3 py-1.5 text-sm focus:outline-none focus:border-chartreuse ${isDark ? 'bg-white/5 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
-              onChange={(e) => applyTemplate(e.target.value)}
+              onChange={(e) => applyTemplate(e.target.value, policy.cloud_provider)}
               value=""
             >
               <option value="" disabled>Load Template...</option>
-              {TEMPLATES.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+              {TEMPLATES.filter(t => t.provider === policy.cloud_provider).map(t => (
+                <option key={`${t.provider}-${t.name}`} value={t.name}>{t.name}</option>
+              ))}
             </select>
             <a
               href="https://github.com/OptimNow/tagging-policy-generator/blob/main/USER_MANUAL.md"
@@ -485,6 +701,7 @@ const App: React.FC = () => {
                 index={idx}
                 tag={tag}
                 isRequired={true}
+                cloudProvider={policy.cloud_provider}
                 onChange={(updated) => updateRequiredTag(idx, updated)}
                 onRemove={() => removeRequiredTag(idx)}
               />
@@ -508,6 +725,7 @@ const App: React.FC = () => {
                 index={idx}
                 tag={tag}
                 isRequired={false}
+                cloudProvider={policy.cloud_provider}
                 onChange={(updated) => updateOptionalTag(idx, updated)}
                 onRemove={() => removeOptionalTag(idx)}
               />
@@ -543,19 +761,29 @@ const App: React.FC = () => {
                 <Download size={14} className="mr-1"/> Download <ChevronDown size={14} className="ml-1"/>
               </Button>
               {showDownloadMenu && (
-                <div className={`absolute right-0 top-full mt-1 py-1 rounded-lg shadow-lg z-10 min-w-[160px] ${isDark ? 'bg-[#2a2a2a] border border-white/10' : 'bg-white border border-gray-200'}`}>
+                <div className={`absolute right-0 top-full mt-1 py-1 rounded-lg shadow-lg z-10 min-w-[180px] ${isDark ? 'bg-[#2a2a2a] border border-white/10' : 'bg-white border border-gray-200'}`}>
                   <button
                     onClick={handleDownloadJson}
                     className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}
                   >
                     JSON Tag Policy
                   </button>
-                  <button
-                    onClick={handleDownloadAwsPolicy}
-                    className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}
-                  >
-                    AWS Tag Policy
-                  </button>
+                  {policy.cloud_provider === 'aws' && (
+                    <button
+                      onClick={handleDownloadAwsPolicy}
+                      className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}
+                    >
+                      AWS Tag Policy
+                    </button>
+                  )}
+                  {policy.cloud_provider === 'azure' && (
+                    <button
+                      onClick={handleDownloadAzurePolicy}
+                      className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}
+                    >
+                      Azure Policy
+                    </button>
+                  )}
                   <button
                     onClick={handleDownloadMarkdown}
                     className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}

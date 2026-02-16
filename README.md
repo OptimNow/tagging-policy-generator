@@ -2,7 +2,7 @@
 
 # FinOps Tagging Policy Generator
 
-**A visual tool for FinOps practitioners to create tagging policies that enable accurate cloud cost attribution.**
+**A visual tool for FinOps practitioners to create tagging policies that enable accurate cloud cost attribution across AWS, GCP, and Azure.**
 
 [**Try the Live App**](http://tagpolgenerator.optimnow.io/) · [User Guide](#how-to-use-the-policy-builder) · [Examples](./examples/)
 
@@ -20,9 +20,9 @@ The generator runs entirely in your browser—no data leaves your machine, no AP
 
 ## What This Tool Does
 
-The FinOps Tagging Policy Generator creates JSON policy files that define your organization's cost attribution tags. These policies specify which tags are required on which resources, what values are acceptable, and how tag names should be formatted.
+The FinOps Tagging Policy Generator creates JSON policy files that define your organization's cost attribution tags. These policies specify which tags (or labels, in GCP terminology) are required on which resources, what values are acceptable, and how tag names should be formatted. For AWS and Azure, you can also export to native policy formats (AWS Organizations Tag Policy or Azure Policy Initiative) that can be uploaded directly to your cloud provider.
 
-The output is designed to work with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp), but the JSON format is straightforward enough to integrate with any compliance checking system you might be using.
+The output is designed to work with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp), but the JSON format is straightforward enough to integrate with any compliance checking system you might be using. For AWS and Azure, you can also export to native policy formats (AWS Organizations Tag Policy and Azure Policy Initiative). For GCP, there is no native label policy format — the JSON export is used with the MCP Server for compliance monitoring.
 
 A typical cost attribution policy looks like this:
 
@@ -30,27 +30,28 @@ A typical cost attribution policy looks like this:
 {
   "version": "1.0",
   "last_updated": "2025-01-04T12:00:00Z",
+  "cloud_provider": "aws",
   "required_tags": [
     {
       "name": "CostCenter",
       "description": "Financial cost center for chargeback",
       "allowed_values": null,
       "validation_regex": "^CC-[0-9]{4,6}$",
-      "applies_to": ["ec2:instance", "rds:db-instance", "s3:bucket", "lambda:function"]
+      "applies_to": ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
     },
     {
       "name": "Owner",
       "description": "Email of the team responsible for this spend",
       "allowed_values": null,
       "validation_regex": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
-      "applies_to": ["ec2:instance", "rds:db-instance", "s3:bucket"]
+      "applies_to": ["ec2:instance", "rds:db", "s3:bucket"]
     },
     {
       "name": "Environment",
       "description": "Deployment environment for cost segmentation",
       "allowed_values": ["production", "staging", "development"],
       "validation_regex": null,
-      "applies_to": ["ec2:instance", "rds:db-instance", "s3:bucket", "lambda:function"]
+      "applies_to": ["ec2:instance", "rds:db", "s3:bucket", "lambda:function"]
     }
   ],
   "optional_tags": [...],
@@ -62,6 +63,8 @@ A typical cost attribution policy looks like this:
   }
 }
 ```
+
+The `cloud_provider` field (`aws`, `gcp`, or `azure`) drives provider-specific behavior throughout the tool—resource type selection, naming conventions, validation rules, and export formats.
 
 ## Getting Started
 
@@ -89,7 +92,7 @@ npm install
 npm run dev
 ```
 
-Open your browser to `http://localhost:5173` and you're ready to go.
+Open your browser to `http://localhost:3000` and you're ready to go.
 
 For production builds:
 
@@ -104,15 +107,25 @@ The `dist/` folder contains static files you can deploy to any web server, CDN, 
 
 ### Starting a New Policy
 
-When you first open the app, you'll see two paths forward:
+When you first open the app, you'll see a **provider toggle** (AWS / GCP / Azure) at the top. Select your cloud provider first—this determines which resource types, naming conventions, and export formats are available.
 
-**Create from Scratch** lets you start with a blank policy or pick from one of the built-in templates. The templates are designed for common FinOps scenarios:
+**Create from Scratch** lets you start with a blank policy or pick from built-in templates. Each provider has four templates designed for common FinOps scenarios:
 
 - **Cost Allocation** includes CostCenter, Owner, and Environment—the foundational tags for any chargeback or showback program
-- **Security & Compliance** adds DataClassification and compliance framework tags (useful when security requirements overlap with cost governance)
+- **Security & Compliance** (AWS) / **Startup** (GCP, Azure) adds compliance or operational tags appropriate for the provider
+- **Enterprise** provides a comprehensive policy for larger organizations with multiple teams and projects
 - **Minimal Starter** provides a lightweight starting point for organizations just beginning their FinOps journey
 
-**Import AWS Policy** takes an existing AWS Organizations tag policy and converts it into the generator's format. This is useful when you're evolving from basic AWS-native enforcement to a more sophisticated FinOps tagging strategy.
+Templates automatically use provider-appropriate conventions: PascalCase tag names for AWS/Azure, snake_case label keys for GCP.
+
+**Import** takes an existing cloud-native policy and converts it into the generator's format. You can import from:
+
+- AWS Organizations Tag Policy
+- Azure Policy Initiative JSON
+
+**Export** on the start screen lets you paste a generator JSON policy and convert it to AWS Organizations or Azure Policy Initiative format.
+
+> **Note on GCP:** There are no GCP import/export tiles because GCP does not have a native label policy format. The GCP policy you build here is exported as JSON and used with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp) for compliance monitoring.
 
 ### The Policy Builder Interface
 
@@ -122,23 +135,23 @@ The editor uses a split-screen layout. The left side is where you build your pol
 
 At the top, you'll find settings that apply to all tags:
 
-- **Case Sensitive** determines whether `CostCenter` and `costcenter` are treated as the same tag
+- **Case Sensitive** determines whether `CostCenter` and `costcenter` are treated as the same tag (GCP labels are always case-sensitive and must be lowercase)
 - **Allow Special Characters** controls whether tag names can include characters beyond letters, numbers, and standard separators
-- **Max Key Length** and **Max Value Length** set upper bounds for tag names and values (AWS defaults are 128 and 256)
+- **Max Key Length** and **Max Value Length** set upper bounds for tag names and values. Defaults vary by provider: AWS (128/256), GCP (63/63), Azure (512/256)
 
 #### Required Tags
 
 These are the tags that must be present on resources for cost attribution to work. For each required tag, you configure:
 
-**Name** is the tag key as it will appear on AWS resources. Stick with established conventions when possible—`CostCenter` is more recognizable than `cost_allocation_code`.
+**Name** is the tag key as it will appear on your cloud resources. AWS and Azure typically use PascalCase (`CostCenter`), while GCP requires lowercase (`cost_center`).
 
 **Description** explains what this tag is for. Good descriptions help engineers understand why they need to tag resources and what values to use. "Financial cost center code from SAP for department-level chargeback" is better than "Cost center".
 
 **Allowed Values** restricts what values are acceptable. For Environment tags, you might specify `production, staging, development`. For CostCenter, you'd typically leave this blank and use a regex pattern instead, since cost center codes follow a format but the actual values come from your finance system.
 
-**Validation Regex** offers pattern-based validation. Cost center codes often follow patterns like `CC-[0-9]{4,6}` or `FIN-[A-Z]{2}-[0-9]{3}`. Owner emails can be validated with standard email patterns. The regex is tested in real-time so you can verify it works before exporting.
+**Validation Regex** offers pattern-based validation. Cost center codes often follow patterns like `CC-[0-9]{4,6}` or `FIN-[A-Z]{2}-[0-9]{3}`. The regex is tested in real-time so you can verify it works before exporting. Note that regex validation is only supported in the generator's native JSON format—AWS, GCP, and Azure native formats only support allowed value lists.
 
-**Applies To** specifies which AWS resource types require this tag. The most important resources for cost attribution are typically EC2 instances, RDS databases, and S3 buckets—these usually represent the bulk of your AWS spend.
+**Applies To** specifies which cloud resource types require this tag. The available resources depend on your selected provider and are organized by FinOps spend impact categories.
 
 #### Optional Tags
 
@@ -146,14 +159,16 @@ Optional tags are recommendations rather than requirements. Use these for tags t
 
 ### Export Options
 
-The Download button offers two formats:
+The Download button offers multiple formats:
 
-- **JSON** exports the raw policy file for use with the FinOps Tag Compliance MCP Server or other automation tools
+- **JSON** exports the raw policy file for use with the FinOps Tag Compliance MCP Server or other automation tools. For GCP policies, this is the primary export format.
 - **Markdown** generates a human-readable document you can share with teams or include in documentation
+- **AWS Tag Policy** (AWS policies) exports to AWS Organizations Tag Policy format with `enforced_for` and `report_required_tag_for`
+- **Azure Policy Initiative** (Azure policies) exports with deny effect for required tags, audit effect for optional tags
 
 ### Saving and Loading Policies
 
-Policies are not saved automatically or stored anywhere. This is intentional: your tagging strategy is yours, and nothing is transmitted to external servers. Use the Download button to save your work, and the Import function to load it back later.
+Policies are not saved automatically or stored anywhere. This is intentional: your tagging strategy is yours, and nothing is transmitted to external servers. Use the Download button to save your work. To load a policy back, use the AWS or Azure import features on the start screen — they accept the generator's native JSON format as well as their respective cloud-native formats.
 
 ## Common FinOps Tagging Patterns
 
@@ -193,7 +208,9 @@ The `examples/` folder contains sample policies:
 
 **enterprise-policy.json** is comprehensive. Seven required tags covering cost centers, environments, ownership, applications, data classification, compliance, and business units. Use this as a reference for building enterprise-grade tagging strategies.
 
-**aws-policy-example.json** demonstrates the AWS Organizations tag policy format, useful for testing the import feature.
+**aws-policy-example.json** demonstrates the AWS Organizations tag policy format, useful for testing the AWS import feature.
+
+**azure-policy-example.json** demonstrates the Azure Policy Initiative format, useful for testing the Azure import feature.
 
 ## Policy Schema Reference
 
@@ -202,7 +219,8 @@ The complete policy structure:
 ```
 {
   version           : string    // Policy version identifier (e.g., "1.0")
-  last_updated      : string    // ISO 8601 timestamp, auto-updated
+  last_updated      : string    // ISO 8601 timestamp, stamped at export time
+  cloud_provider    : string    // "aws", "gcp", or "azure"
   required_tags     : array     // Tags that must be present
   optional_tags     : array     // Recommended but not enforced
   tag_naming_rules  : object    // Global formatting rules
@@ -241,18 +259,48 @@ The complete policy structure:
 
 ## Supported Resource Types
 
-The tool supports 24+ AWS resource types organized by FinOps spend categories:
+The tool supports resource types across all three cloud providers, organized by FinOps spend categories:
+
+### AWS (27 resource types)
 
 | Category | Resource Types |
 |----------|----------------|
-| **Compute** | `ec2:instance`, `ec2:volume`, `ec2:snapshot`, `lambda:function`, `ecs:service`, `ecs:task-definition`, `eks:cluster`, `eks:nodegroup` |
+| **Compute** | `ec2:instance`, `ec2:volume`, `lambda:function`, `ecs:service`, `ecs:cluster`, `ecs:task-definition`, `eks:cluster`, `eks:nodegroup` |
 | **Storage** | `s3:bucket`, `elasticfilesystem:file-system`, `fsx:file-system` |
-| **Database** | `rds:db-instance`, `rds:cluster`, `dynamodb:table`, `elasticache:cluster`, `redshift:cluster`, `es:domain` |
-| **AI/ML** | `sagemaker:endpoint`, `sagemaker:notebook-instance`, `bedrock:provisioned-model-throughput` |
-| **Networking** | `elasticloadbalancing:loadbalancer`, `ec2:natgateway` |
+| **Database** | `rds:db`, `dynamodb:table`, `elasticache:cluster`, `redshift:cluster` |
+| **AI/ML** | `sagemaker:endpoint`, `sagemaker:notebook-instance`, `bedrock:agent`, `bedrock:knowledge-base` |
+| **Networking** | `elasticloadbalancing:loadbalancer`, `elasticloadbalancing:targetgroup`, `ec2:natgateway`, `ec2:vpc`, `ec2:subnet`, `ec2:security-group` |
 | **Analytics** | `kinesis:stream`, `glue:job` |
 
-Plus an **"All Other Resources"** option for comprehensive coverage of unlisted services.
+### GCP (39 resource types)
+
+| Category | Resource Types |
+|----------|----------------|
+| **Compute** | `compute.googleapis.com/Instance`, `compute.googleapis.com/Disk`, `compute.googleapis.com/Image`, `compute.googleapis.com/Snapshot`, `run.googleapis.com/Service`, `container.googleapis.com/Cluster`, `cloudworkstations.googleapis.com/Cluster` |
+| **Storage** | `storage.googleapis.com/Bucket`, `filestore.googleapis.com/Instance`, `artifactregistry.googleapis.com/Repository` |
+| **Database** | `sqladmin.googleapis.com/Instance`, `bigtable.googleapis.com/Instance`, `spanner.googleapis.com/Instance`, `alloydb.googleapis.com/Cluster`, `firestore.googleapis.com/Database`, `datastore.googleapis.com/Database`, `memorystore.googleapis.com/Instance` |
+| **AI/ML** | `aiplatform.googleapis.com/Endpoint`, `aiplatform.googleapis.com/NotebookRuntime`, `datafusion.googleapis.com/Instance` |
+| **Networking** | `compute.googleapis.com/ForwardingRule`, `compute.googleapis.com/Network`, `compute.googleapis.com/Subnetwork`, and 6 more |
+| **Analytics** | `bigquery.googleapis.com/Dataset`, `bigquery.googleapis.com/Table`, `dataflow.googleapis.com/Job`, and 4 more |
+| **Security & Operations** | `cloudkms.googleapis.com/KeyRing`, `secretmanager.googleapis.com/Secret`, `logging.googleapis.com/LogBucket` |
+
+### Azure (89 resource types)
+
+| Category | Count | Example Resource Types |
+|----------|-------|----------------------|
+| **Compute** | 18 | `Microsoft.Compute/virtualMachines`, `Microsoft.Compute/virtualMachineScaleSets`, `Microsoft.Compute/disks`, ... |
+| **Storage** | 7 | `Microsoft.Storage/storageAccounts`, `Microsoft.DataLakeStore/accounts`, ... |
+| **Database** | 10 | `Microsoft.Sql/servers`, `Microsoft.DocumentDB/databaseAccounts`, `Microsoft.Cache/redis`, ... |
+| **AI/ML** | 5 | `Microsoft.MachineLearningServices/workspaces`, `Microsoft.CognitiveServices/accounts`, ... |
+| **Networking** | 16 | `Microsoft.Network/virtualNetworks`, `Microsoft.Network/loadBalancers`, ... |
+| **Containers & Kubernetes** | 4 | `Microsoft.ContainerService/managedClusters`, `Microsoft.ContainerRegistry/registries`, ... |
+| **Analytics & Integration** | 11 | `Microsoft.Databricks/workspaces`, `Microsoft.DataFactory/factories`, ... |
+| **Web & Application** | 6 | `Microsoft.Web/sites`, `Microsoft.Web/serverFarms`, ... |
+| **Security & Identity** | 3 | `Microsoft.KeyVault/vaults`, `Microsoft.KeyVault/managedHSMs`, ... |
+| **Monitoring** | 5 | `Microsoft.Insights/components`, `Microsoft.OperationalInsights/workspaces`, ... |
+| **DevOps & DevCenter** | 4 | `Microsoft.DevCenter/devcenters`, `Microsoft.DevTestLab/labs`, ... |
+
+The full list of all resource types is available in the tool's resource picker.
 
 ## Security and Privacy
 

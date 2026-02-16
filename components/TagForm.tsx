@@ -1,25 +1,34 @@
-import React, { useState } from 'react';
-import { RequiredTag, OptionalTag, AWS_RESOURCE_TYPES, RESOURCE_CATEGORIES } from '../types';
+import React, { useState, useEffect } from 'react';
+import { RequiredTag, OptionalTag, CloudProvider, getResourceCategories, getResourceTypes } from '../types';
 import { Input, TextArea, Checkbox } from './Input';
 import { Button } from './Button';
 import { useTheme } from '../context/ThemeContext';
-import { Trash2, ChevronDown, ChevronUp, AlertCircle, CheckCircle, ChevronRight } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronUp, AlertCircle, CheckCircle, ChevronRight, Copy, Check } from 'lucide-react';
+import { generateAzurePortalJson } from '../services/azure-converter';
 
 interface TagFormProps {
   tag: RequiredTag | OptionalTag;
   isRequired: boolean;
+  cloudProvider: CloudProvider;
   onChange: (updatedTag: RequiredTag | OptionalTag) => void;
   onRemove: () => void;
   index: number;
 }
 
-export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onRemove, index }) => {
+export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider, onChange, onRemove, index }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const [isExpanded, setIsExpanded] = useState(true);
+  const resourceCategories = getResourceCategories(cloudProvider);
+  const allResourceTypes = getResourceTypes(cloudProvider);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [testRegexInput, setTestRegexInput] = useState('');
   const [regexTestResult, setRegexTestResult] = useState<boolean | null>(null);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(RESOURCE_CATEGORIES.map(c => c.name)));
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [azureCopied, setAzureCopied] = useState(false);
+
+  useEffect(() => {
+    setExpandedCategories(new Set());
+  }, [cloudProvider]);
 
   const handleAllowedValuesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -46,12 +55,12 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
     if (!isRequired) return;
     onChange({
       ...tag,
-      applies_to: checked ? [...AWS_RESOURCE_TYPES] : []
+      applies_to: checked ? [...allResourceTypes] : []
     } as RequiredTag);
   };
 
   const isAllSelected = isRequired &&
-    (tag as RequiredTag).applies_to.length === AWS_RESOURCE_TYPES.length;
+    (tag as RequiredTag).applies_to.length === allResourceTypes.length;
 
   const toggleCategory = (categoryName: string) => {
     setExpandedCategories(prev => {
@@ -111,6 +120,19 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
     }
   };
 
+  const handleCopyAzureJson = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const effect = isRequired ? 'deny' : 'audit';
+    const json = generateAzurePortalJson(tag.name, tag.description, effect, tag.allowed_values);
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(json, null, 2));
+      setAzureCopied(true);
+      setTimeout(() => setAzureCopied(false), 2000);
+    } catch {
+      setAzureCopied(false);
+    }
+  };
+
   return (
     <div className={`rounded-lg overflow-hidden mb-4 transition-all ${isDark ? 'bg-white/5 border border-white/10 hover:border-white/20' : 'bg-white border border-gray-200 hover:border-gray-300'}`}>
       {/* Header */}
@@ -126,6 +148,17 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
             {!tag.name && <span className="text-xs text-red-400 flex items-center gap-1"><AlertCircle size={12}/> Name required</span>}
         </div>
         <div className="flex items-center gap-2">
+            {cloudProvider === 'azure' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopyAzureJson}
+                className={azureCopied ? 'text-white bg-green-600 hover:bg-green-600' : 'text-white bg-green-600 hover:bg-green-700'}
+                title="Copy Azure Policy JSON — paste directly into Azure Portal"
+              >
+                {azureCopied ? <><Check size={14} className="mr-1" /> Copied</> : <><Copy size={14} className="mr-1" /> Azure JSON</>}
+              </Button>
+            )}
             <Button
                 variant="ghost"
                 size="sm"
@@ -143,7 +176,7 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
         <div className={`p-4 space-y-4 ${isDark ? 'border-t border-white/10' : 'border-t border-gray-200'}`}>
           <Input
             label="Tag Name"
-            placeholder="e.g. CostCenter"
+            placeholder={cloudProvider === 'gcp' ? 'e.g. cost_center' : 'e.g. CostCenter'}
             value={tag.name}
             onChange={(e) => onChange({ ...tag, name: e.target.value })}
             error={!tag.name}
@@ -208,7 +241,7 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
                   />
                 </div>
                 <div className={`rounded overflow-hidden ${isDark ? 'bg-black/20 border border-white/5' : 'bg-gray-50 border border-gray-200'}`}>
-                  {RESOURCE_CATEGORIES.map((category) => {
+                  {resourceCategories.map((category) => {
                     const isOpen = expandedCategories.has(category.name);
                     const isFullySelected = isCategoryFullySelected(category.resources);
                     const isPartiallySelected = isCategoryPartiallySelected(category.resources);
@@ -254,7 +287,7 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, onChange, onR
                         </div>
                         {/* Category Resources */}
                         {isOpen && (
-                          <div className={`grid grid-cols-2 gap-1 px-3 pb-2 pt-1 ${isDark ? 'bg-black/20' : 'bg-white/50'}`}>
+                          <div className={`grid ${cloudProvider === 'gcp' || cloudProvider === 'azure' ? 'grid-cols-1' : 'grid-cols-2'} gap-1 px-3 pb-2 pt-1 ${isDark ? 'bg-black/20' : 'bg-white/50'}`}>
                             {category.resources.map(resource => (
                               <Checkbox
                                 key={resource}

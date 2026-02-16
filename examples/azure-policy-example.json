@@ -1,0 +1,98 @@
+{
+  "policyDefinitions": [
+    {
+      "policyDefinitionId": "require-costcenter-tag",
+      "policyRule": {
+        "if": {
+          "allOf": [
+            {
+              "field": "type",
+              "equals": "Microsoft.Resources/subscriptions/resourceGroups"
+            },
+            {
+              "field": "[concat('tags[', parameters('tagName'), ']')]",
+              "exists": "false"
+            }
+          ]
+        },
+        "then": {
+          "effect": "deny"
+        }
+      },
+      "parameters": {
+        "tagName": {
+          "type": "String",
+          "defaultValue": "CostCenter"
+        }
+      },
+      "metadata": {
+        "category": "Tags",
+        "description": "Identifies the cost center for chargeback and financial reporting"
+      }
+    },
+    {
+      "policyDefinitionId": "require-environment-tag",
+      "policyRule": {
+        "if": {
+          "allOf": [
+            {
+              "field": "type",
+              "equals": "Microsoft.Resources/subscriptions/resourceGroups"
+            },
+            {
+              "anyOf": [
+                {
+                  "field": "[concat('tags[', parameters('tagName'), ']')]",
+                  "exists": "false"
+                },
+                {
+                  "field": "[concat('tags[', parameters('tagName'), ']')]",
+                  "notIn": "[parameters('allowedValues')]"
+                }
+              ]
+            }
+          ]
+        },
+        "then": {
+          "effect": "deny"
+        }
+      },
+      "parameters": {
+        "tagName": {
+          "type": "String",
+          "defaultValue": "Environment"
+        },
+        "allowedValues": {
+          "type": "Array",
+          "defaultValue": ["Production", "Staging", "Development", "Sandbox"]
+        }
+      },
+      "metadata": {
+        "category": "Tags",
+        "description": "Identifies the deployment environment for the resource"
+      }
+    },
+    {
+      "policyDefinitionId": "audit-owner-tag",
+      "policyRule": {
+        "if": {
+          "field": "[concat('tags[', parameters('tagName'), ']')]",
+          "exists": "false"
+        },
+        "then": {
+          "effect": "audit"
+        }
+      },
+      "parameters": {
+        "tagName": {
+          "type": "String",
+          "defaultValue": "Owner"
+        }
+      },
+      "metadata": {
+        "category": "Tags",
+        "description": "Identifies the team or individual responsible for the resource"
+      }
+    }
+  ]
+}

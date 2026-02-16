@@ -1,5 +1,7 @@
 import { Policy } from '../types';
 import { convertMcpToAwsPolicy } from './converter';
+import { convertMcpToGcpPolicy } from './gcp-converter';
+import { convertMcpToAzurePolicy } from './azure-converter';
 
 export const generateMarkdown = (policy: Policy): string => {
   const lines: string[] = [];
@@ -8,6 +10,12 @@ export const generateMarkdown = (policy: Policy): string => {
   lines.push('');
   lines.push(`**Version:** ${policy.version}`);
   lines.push(`**Last Updated:** ${new Date(policy.last_updated).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`);
+  const providerName = policy.cloud_provider === 'gcp'
+    ? 'Google Cloud Platform'
+    : policy.cloud_provider === 'azure'
+      ? 'Microsoft Azure'
+      : 'Amazon Web Services';
+  lines.push(`**Cloud Provider:** ${providerName}`);
   lines.push('');
 
   // Tag Naming Rules
@@ -84,11 +92,17 @@ export const generateMarkdown = (policy: Policy): string => {
   return lines.join('\n');
 };
 
-export const downloadJson = (policy: Policy, filename: string = 'tagging_policy.json') => {
+export const downloadJson = (policy: Policy, filename?: string) => {
+  const defaultFilename = policy.cloud_provider === 'gcp'
+    ? 'gcp_tagging_policy.json'
+    : policy.cloud_provider === 'azure'
+      ? 'azure_tagging_policy.json'
+      : 'tagging_policy.json';
+  const actualFilename = filename || defaultFilename;
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(policy, null, 2));
   const downloadAnchorNode = document.createElement('a');
   downloadAnchorNode.setAttribute("href", dataStr);
-  downloadAnchorNode.setAttribute("download", filename);
+  downloadAnchorNode.setAttribute("download", actualFilename);
   document.body.appendChild(downloadAnchorNode);
   downloadAnchorNode.click();
   downloadAnchorNode.remove();
@@ -108,6 +122,28 @@ export const downloadMarkdown = (policy: Policy, filename: string = 'tagging_pol
 export const downloadAwsPolicy = (policy: Policy, filename: string = 'aws_tag_policy.json') => {
   const awsPolicy = convertMcpToAwsPolicy(policy);
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(awsPolicy, null, 2));
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute("href", dataStr);
+  downloadAnchorNode.setAttribute("download", filename);
+  document.body.appendChild(downloadAnchorNode);
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+};
+
+export const downloadGcpPolicy = (policy: Policy, filename: string = 'gcp_label_policy.json') => {
+  const gcpPolicy = convertMcpToGcpPolicy(policy);
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(gcpPolicy, null, 2));
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute("href", dataStr);
+  downloadAnchorNode.setAttribute("download", filename);
+  document.body.appendChild(downloadAnchorNode);
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+};
+
+export const downloadAzurePolicy = (policy: Policy, filename: string = 'azure_tag_policy.json') => {
+  const azurePolicy = convertMcpToAzurePolicy(policy);
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(azurePolicy, null, 2));
   const downloadAnchorNode = document.createElement('a');
   downloadAnchorNode.setAttribute("href", dataStr);
   downloadAnchorNode.setAttribute("download", filename);

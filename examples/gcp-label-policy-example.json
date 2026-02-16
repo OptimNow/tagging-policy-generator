@@ -1,0 +1,71 @@
+{
+  "label_policy": {
+    "labels": {
+      "cost_center": {
+        "label_key": "cost_center",
+        "description": "Business unit or cost center for billing allocation",
+        "allowed_values": ["engineering", "marketing", "sales", "operations", "finance"],
+        "enforced_for": [
+          "compute.googleapis.com/Instance",
+          "storage.googleapis.com/Bucket",
+          "sqladmin.googleapis.com/Instance",
+          "container.googleapis.com/Cluster",
+          "bigquery.googleapis.com/Dataset",
+          "memorystore.googleapis.com/Instance",
+          "firestore.googleapis.com/Database",
+          "spanner.googleapis.com/Instance"
+        ],
+        "required": true
+      },
+      "environment": {
+        "label_key": "environment",
+        "description": "Deployment environment for the resource",
+        "allowed_values": ["production", "staging", "development", "sandbox"],
+        "enforced_for": [
+          "compute.googleapis.com/Instance",
+          "run.googleapis.com/Service",
+          "sqladmin.googleapis.com/Instance",
+          "container.googleapis.com/Cluster",
+          "memorystore.googleapis.com/Instance"
+        ],
+        "required": true
+      },
+      "owner": {
+        "label_key": "owner",
+        "description": "Team or individual responsible for the resource",
+        "allowed_values": null,
+        "enforced_for": [
+          "compute.googleapis.com/Instance",
+          "storage.googleapis.com/Bucket",
+          "sqladmin.googleapis.com/Instance",
+          "memorystore.googleapis.com/Instance",
+          "bigquery.googleapis.com/Dataset"
+        ],
+        "required": true
+      },
+      "project_name": {
+        "label_key": "project_name",
+        "description": "Project or application name for tracking purposes",
+        "allowed_values": null,
+        "required": false
+      },
+      "data_classification": {
+        "label_key": "data_classification",
+        "description": "Data sensitivity level for compliance",
+        "allowed_values": ["public", "internal", "confidential", "restricted"],
+        "enforced_for": [
+          "storage.googleapis.com/Bucket",
+          "bigquery.googleapis.com/Table",
+          "firestore.googleapis.com/Database",
+          "secretmanager.googleapis.com/Secret"
+        ],
+        "required": false
+      }
+    },
+    "naming_rules": {
+      "max_key_length": 63,
+      "max_value_length": 63,
+      "key_format": "lowercase_with_underscores"
+    }
+  }
+}
