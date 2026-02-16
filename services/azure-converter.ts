@@ -239,15 +239,34 @@ function buildPolicyDefinition(
   }
 
   // Build policy rule
-  const policyRule: AzurePolicyDefinition['properties']['policyRule'] = {
-    if: {
-      field: "[concat('tags[', parameters('tagName'), ']')]",
-      exists: "false",
-    },
-    then: {
-      effect,
-    },
-  };
+  // When allowedValues are present, enforce both tag existence AND value validation
+  const policyRule: AzurePolicyDefinition['properties']['policyRule'] = allowedValues && allowedValues.length > 0
+    ? {
+        if: {
+          anyOf: [
+            {
+              field: "[concat('tags[', parameters('tagName'), ']')]",
+              exists: "false",
+            },
+            {
+              field: "[concat('tags[', parameters('tagName'), ']')]",
+              notIn: "[parameters('allowedValues')]",
+            },
+          ],
+        },
+        then: {
+          effect,
+        },
+      }
+    : {
+        if: {
+          field: "[concat('tags[', parameters('tagName'), ']')]",
+          exists: "false",
+        },
+        then: {
+          effect,
+        },
+      };
 
   return {
     properties: {
