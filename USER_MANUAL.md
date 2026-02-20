@@ -181,6 +181,63 @@ The generator supports 27 AWS resource types organized by FinOps spend impact:
 | **Networking** (Often overlooked) | `elasticloadbalancing:loadbalancer`, `elasticloadbalancing:targetgroup`, `ec2:natgateway`, `ec2:vpc`, `ec2:subnet`, `ec2:security-group` |
 | **Analytics** (Data & streaming) | `kinesis:stream`, `glue:job` |
 
+### Your Workflow for AWS
+
+AWS enforces tagging through **Tag Policies** in **AWS Organizations**. Unlike Azure (where you create one policy per tag), AWS uses a single policy that covers all your tags at once. Here's the end-to-end workflow.
+
+> **Video walkthrough:** Watch the short video below for a step-by-step demonstration of the AWS workflow.
+
+<https://www.loom.com/share/1d47b7390e2a4747ad8568e38d0fbf0e>
+
+#### 1. Build Your Policy in the Generator
+
+1. Open the tool — **AWS** is selected by default
+2. Choose a template (e.g., **Cost Allocation**) or start blank
+3. Configure your required tags — name, description, allowed values, and which resource types they apply to
+4. Click **Download → AWS Tag Policy** to get the exported AWS Organizations Tag Policy JSON
+
+The downloaded file contains all your tags in a single JSON document using the AWS Organizations Tag Policy syntax (`@@assign` operators, `enforced_for`, `report_required_tag_for`).
+
+#### 2. Enable Tag Policies in AWS Organizations
+
+Before you can create a tag policy, the feature must be enabled:
+
+1. Go to **AWS Console** → **AWS Organizations**
+2. In the left sidebar, click **Policies**
+3. Find **Tag policies** in the list
+4. If it shows "Disabled", click on it and **Enable** it
+
+> **Prerequisite:** Your AWS account must be the management account of an AWS Organization. If you're using a standalone account, you'll need to create an Organization first.
+
+#### 3. Create the Tag Policy
+
+1. In **AWS Organizations** → **Policies** → **Tag policies**, click **Create policy**
+2. Give it a name — e.g., `FinOps Cost Allocation Policy`
+3. Switch to the **JSON** editor tab
+4. **Replace the entire default JSON** with the content from the file you downloaded from the generator
+5. Click **Create policy**
+
+Your policy is now defined but not yet applied to any account.
+
+#### 4. Attach the Policy to Your Account
+
+1. Click on the policy you just created
+2. Go to the **Targets** tab
+3. Click **Attach**
+4. Select the AWS account or Organizational Unit (OU) you want the policy to apply to
+5. Click **Attach policy**
+
+The tag policy is now active. AWS will start tracking compliance for all resources in the attached accounts.
+
+#### 5. Check Compliance
+
+AWS provides built-in compliance reporting:
+
+- Go to your tag policy → **Compliance** tab to see which accounts and resource types have non-compliant tags
+- Use **Resource Groups → Tag Editor** for a more detailed view of resource tagging across your account
+
+For deeper analysis, you can use the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp). It reads the generator's native JSON policy (not the AWS format) and provides detailed reports: which resources are missing tags, which have invalid values, and how compliance is trending over time.
+
 ### AWS Export Format
 
 When you export to AWS Tag Policy format, the generator converts your policy into the AWS Organizations Tag Policy syntax:
