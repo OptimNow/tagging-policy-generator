@@ -25,3 +25,12 @@ dist-ssr
 
 # Local-only docs (video scripts, drafts)
 doc/AWS_VIDEO_SCRIPT.md
+
+# Sensitive local environment and key material
+.env
+.env.*
+*.pem
+*.p12
+id_rsa
+id_rsa.pub
+credentials
