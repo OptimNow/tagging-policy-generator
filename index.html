@@ -11,22 +11,23 @@
     <meta name="keywords" content="FinOps, cloud tagging, AWS tagging policy, GCP labeling policy, Google Cloud labels, Azure tagging policy, Azure Policy, Azure resource tags, cost allocation, cloud cost management, AWS Organizations, GCP resource labels, tag compliance, chargeback, showback, cost attribution, cloud financial management, MCP server" />
     <meta name="author" content="OptimNow" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="http://tagpolgenerator.optimnow.io/" />
+    <link rel="canonical" href="https://tagpolgenerator.optimnow.io/" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="http://tagpolgenerator.optimnow.io/" />
+    <meta property="og:url" content="https://tagpolgenerator.optimnow.io/" />
     <meta property="og:title" content="FinOps Tagging Policy Generator - AWS, GCP & Azure Cloud Cost Attribution Tool" />
     <meta property="og:description" content="Create tagging and labeling policies for accurate cloud cost attribution. Visual policy builder for AWS Organizations, GCP, and Azure Policy with templates, validation, and export options." />
-    <meta property="og:image" content="http://tagpolgenerator.optimnow.io/Images/logo.png" />
+    <meta property="og:image" content="https://tagpolgenerator.optimnow.io/Images/logo.png" />
     <meta property="og:site_name" content="OptimNow FinOps Tools" />
+    <meta property="og:locale" content="en_US" />
 
     <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="http://tagpolgenerator.optimnow.io/" />
-    <meta property="twitter:title" content="FinOps Tagging Policy Generator - AWS, GCP & Azure Cloud Cost Attribution Tool" />
-    <meta property="twitter:description" content="Create tagging and labeling policies for accurate cloud cost attribution. Visual policy builder for AWS Organizations, GCP, and Azure Policy with templates, validation, and export options." />
-    <meta property="twitter:image" content="http://tagpolgenerator.optimnow.io/Images/logo.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://tagpolgenerator.optimnow.io/" />
+    <meta name="twitter:title" content="FinOps Tagging Policy Generator - AWS, GCP & Azure Cloud Cost Attribution Tool" />
+    <meta name="twitter:description" content="Create tagging and labeling policies for accurate cloud cost attribution. Visual policy builder for AWS Organizations, GCP, and Azure Policy with templates, validation, and export options." />
+    <meta name="twitter:image" content="https://tagpolgenerator.optimnow.io/Images/logo.png" />
 
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="/Images/favicon.png" />
@@ -78,13 +79,13 @@
       }
     </style>
 
-    <!-- Structured Data -->
+    <!-- Structured Data: WebApplication -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "WebApplication",
       "name": "FinOps Tagging Policy Generator",
-      "url": "http://tagpolgenerator.optimnow.io/",
+      "url": "https://tagpolgenerator.optimnow.io/",
       "description": "Create tagging and labeling policies for accurate cloud cost attribution. Visual policy builder for AWS Organizations, GCP, and Azure Policy with templates, validation, and export to JSON or Markdown.",
       "applicationCategory": "BusinessApplication",
       "operatingSystem": "Any",
@@ -105,16 +106,61 @@
         "Azure Policy Initiative import/export",
         "Real-time validation with provider-specific rules",
         "Pre-built templates for Cost Allocation, Enterprise, and Startup use cases",
-        "MCP server compatible",
-        "100% client-side, privacy-focused"
+        "MCP server compatible JSON output",
+        "100% client-side — no data leaves your browser"
       ],
       "browserRequirements": "Requires JavaScript. Modern browser recommended.",
-      "softwareVersion": "1.0",
-      "aggregateRating": {
-        "@type": "AggregateRating",
-        "ratingValue": "5",
-        "ratingCount": "1"
-      }
+      "softwareVersion": "1.0"
+    }
+    </script>
+
+    <!-- Structured Data: FAQ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is the FinOps Tagging Policy Generator?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The FinOps Tagging Policy Generator is a free, browser-based tool that helps FinOps practitioners create tagging and labeling policies for accurate cloud cost attribution across AWS, GCP, and Azure. It provides a visual policy builder with real-time validation, pre-built templates, and export to multiple formats including JSON, Markdown, AWS Organizations Tag Policy, GCP Label Policy, and Azure Policy Initiative."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which cloud providers are supported?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The tool supports all three major cloud providers: Amazon Web Services (AWS) with 27 resource types, Google Cloud Platform (GCP) with 39 resource types, and Microsoft Azure with 89 resource types. Each provider has dedicated import/export formats, provider-specific validation rules, and tailored templates."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is my data secure when using this tool?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. The tool is 100% client-side — all processing happens in your browser. No data is sent to any server. Your tagging policies never leave your machine unless you explicitly download them. There are no API calls, no accounts required, and no tracking of policy content."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What export formats are available?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "You can export your tagging policy in five formats: native JSON (compatible with the FinOps Tag Compliance MCP Server), Markdown for documentation, AWS Organizations Tag Policy format, GCP Label Policy format, and Azure Policy Initiative format. The tool warns you about any features that won't be preserved during format conversion."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is this tool free to use?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, the FinOps Tagging Policy Generator is completely free. It is an open-source tool built by OptimNow, available on GitHub, with no registration, subscriptions, or hidden costs."
+          }
+        }
+      ]
     }
     </script>
 
@@ -132,5 +178,87 @@
   <body>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
+
+    <!-- SEO: Static content for search engines and LLMs that don't execute JavaScript -->
+    <noscript>
+      <header style="max-width:800px;margin:0 auto;padding:2rem">
+        <h1>FinOps Tagging Policy Generator</h1>
+        <p>A free, open-source tool by <a href="https://www.optimnow.io">OptimNow</a> for creating cloud tagging and labeling policies.</p>
+      </header>
+      <main style="max-width:800px;margin:0 auto;padding:0 2rem">
+        <section>
+          <h2>What It Does</h2>
+          <p>The FinOps Tagging Policy Generator helps FinOps practitioners, cloud architects, and platform engineers create, validate, and export tagging policies for accurate cloud cost attribution. It supports AWS, GCP, and Azure with provider-specific resource types, validation rules, and native policy format conversions.</p>
+        </section>
+
+        <section>
+          <h2>Supported Cloud Providers</h2>
+          <ul>
+            <li><strong>Amazon Web Services (AWS)</strong> — 27 resource types across 6 categories. Import/export AWS Organizations Tag Policy format.</li>
+            <li><strong>Google Cloud Platform (GCP)</strong> — 39 resource types across 7 categories. Import/export GCP Label Policy format with automatic lowercase key enforcement.</li>
+            <li><strong>Microsoft Azure</strong> — 89 resource types across 11 categories. Import/export Azure Policy Initiative format with tag inheritance recommendations.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Key Features</h2>
+          <ul>
+            <li>Visual drag-and-drop policy builder with split-screen live JSON preview</li>
+            <li>12 pre-built templates: Cost Allocation, Startup, Enterprise, and Minimal Starter for each provider</li>
+            <li>Real-time validation with provider-specific rules (GCP lowercase keys, Azure forbidden characters, AWS enforcement support)</li>
+            <li>Resource type selection organized by FinOps spend impact categories</li>
+            <li>Regex validation testing with live match/no-match feedback</li>
+            <li>Export to JSON, Markdown, AWS Organizations Tag Policy, GCP Label Policy, or Azure Policy Initiative</li>
+            <li>Import existing policies from AWS Organizations, GCP, or Azure to edit and enhance</li>
+            <li>Compatible with the FinOps Tag Compliance MCP Server for automated compliance checking</li>
+            <li>Dark and light theme support</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Export Formats</h2>
+          <ul>
+            <li><strong>JSON Tag Policy</strong> — Native format compatible with the FinOps Tag Compliance MCP Server</li>
+            <li><strong>Markdown</strong> — Human-readable documentation of your tagging policy</li>
+            <li><strong>AWS Organizations Tag Policy</strong> — Ready to deploy via AWS Organizations with enforced_for and report_required_tag_for</li>
+            <li><strong>GCP Label Policy</strong> — Google Cloud label policy format with naming rule enforcement</li>
+            <li><strong>Azure Policy Initiative</strong> — Azure Policy definitions with deny/audit effects and tag inheritance recommendations</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Privacy &amp; Security</h2>
+          <p>This tool is 100% client-side. All processing happens in your browser. No data is sent to any server — your tagging policies never leave your machine unless you explicitly download them. No accounts, no API keys, no tracking of policy content.</p>
+        </section>
+
+        <section>
+          <h2>Frequently Asked Questions</h2>
+          <h3>What is the FinOps Tagging Policy Generator?</h3>
+          <p>A free, browser-based tool that helps FinOps practitioners create tagging and labeling policies for accurate cloud cost attribution across AWS, GCP, and Azure.</p>
+
+          <h3>Which cloud providers are supported?</h3>
+          <p>AWS (27 resource types), GCP (39 resource types), and Azure (89 resource types), each with provider-specific templates, validation, and export formats.</p>
+
+          <h3>Is my data secure?</h3>
+          <p>Yes. Everything runs in your browser. No data is sent to any server. Your policies never leave your machine unless you download them.</p>
+
+          <h3>What export formats are available?</h3>
+          <p>JSON (MCP-compatible), Markdown, AWS Organizations Tag Policy, GCP Label Policy, and Azure Policy Initiative.</p>
+
+          <h3>Is this tool free?</h3>
+          <p>Yes, completely free and open-source. Built by OptimNow. No registration or subscriptions required.</p>
+
+          <h3>What is the MCP Server compatibility?</h3>
+          <p>The JSON export format is compatible with the FinOps Tag Compliance MCP Server, which enables automated tag compliance checking across your cloud resources using AI-powered tools.</p>
+        </section>
+
+        <footer style="margin-top:2rem;padding:1rem 0;border-top:1px solid #ccc">
+          <p>Built by <a href="https://www.optimnow.io">OptimNow</a> |
+            <a href="https://github.com/OptimNow/tagging-policy-generator">GitHub</a> |
+            <a href="https://github.com/OptimNow/tagging-policy-generator/blob/main/USER_MANUAL.md">User Manual</a>
+          </p>
+        </footer>
+      </main>
+    </noscript>
   </body>
 </html>
