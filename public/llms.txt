@@ -1,0 +1,46 @@
+# FinOps Tagging Policy Generator
+
+> A free, browser-based tool for creating cloud tagging and labeling policies for accurate cost attribution across AWS, GCP, and Azure.
+
+Built by [OptimNow](https://www.optimnow.io). Open-source on [GitHub](https://github.com/OptimNow/tagging-policy-generator).
+
+## What It Does
+
+The FinOps Tagging Policy Generator helps FinOps practitioners, cloud architects, and platform engineers create, validate, and export tagging policies. It provides a visual policy builder with a live JSON preview, real-time validation, and provider-specific templates.
+
+Tagging policies define which tags (AWS/Azure) or labels (GCP) must be applied to cloud resources for cost allocation, chargeback, showback, and compliance. This tool generates policy files compatible with the FinOps Tag Compliance MCP Server for automated compliance checking.
+
+## Supported Cloud Providers
+
+- **AWS** — 27 resource types across 6 spend-impact categories. Import/export AWS Organizations Tag Policy format. Supports enforced_for and report_required_tag_for.
+- **GCP** — 39 resource types across 7 categories. Import/export GCP Label Policy format. Enforces lowercase keys (max 63 chars).
+- **Azure** — 89 resource types across 11 categories. Import/export Azure Policy Initiative format. Includes tag inheritance recommendations and managed resource group notes.
+
+## Key Features
+
+- Visual policy builder with split-screen live JSON preview
+- 12 pre-built templates (4 per provider): Cost Allocation, Startup, Enterprise, Minimal Starter
+- Real-time validation with provider-specific rules
+- Resource type selection organized by FinOps spend impact
+- Regex validation testing with live feedback
+- Required vs optional tag distinction
+- Dark and light theme
+
+## Export Formats
+
+- **JSON** — Native format, compatible with the FinOps Tag Compliance MCP Server
+- **Markdown** — Human-readable policy documentation
+- **AWS Organizations Tag Policy** — Deploy via AWS Organizations
+- **GCP Label Policy** — Google Cloud label enforcement format
+- **Azure Policy Initiative** — Azure Policy definitions with deny/audit effects
+
+## Privacy
+
+100% client-side. All processing happens in the browser. No data is sent to any server. No accounts required. No tracking of policy content.
+
+## Links
+
+- App: https://tagpolgenerator.optimnow.io/
+- User Manual: https://github.com/OptimNow/tagging-policy-generator/blob/main/USER_MANUAL.md
+- GitHub: https://github.com/OptimNow/tagging-policy-generator
+- OptimNow: https://www.optimnow.io
