@@ -1,91 +1,432 @@
-import { Policy, RequiredTag, OptionalTag } from '../types';
+import { Policy, RequiredTag, OptionalTag, CategorizedExportWarnings } from '../types';
 
-// Azure Policy Definition structure
-interface AzurePolicyDefinition {
+// ---------------------------------------------------------------------------
+// ARM deployment template shapes (export target)
+// ---------------------------------------------------------------------------
+
+interface ArmParameterDefinition {
+  type: 'String' | 'Array' | 'Object' | 'Boolean' | 'Integer';
+  metadata: { displayName: string; description: string };
+  defaultValue?: string | string[] | number | boolean;
+  allowedValues?: string[];
+}
+
+interface AzureCustomPolicyDefinition {
+  type: 'Microsoft.Authorization/policyDefinitions';
+  apiVersion: '2021-06-01';
+  name: string;
   properties: {
     displayName: string;
-    policyType: string;
-    mode: string;
+    policyType: 'Custom';
+    mode: 'Indexed' | 'All';
     description: string;
-    metadata?: Record<string, string>;
-    parameters: Record<string, {
-      type: string;
-      metadata: { displayName: string; description: string };
-      defaultValue: string | string[];
-    }>;
+    metadata: Record<string, string>;
+    parameters: Record<string, ArmParameterDefinition>;
     policyRule: {
       if: Record<string, unknown>;
-      then: {
-        effect: string;
-        details?: Record<string, unknown>;
-      };
+      then: { effect: string };
     };
   };
 }
 
-// Azure Policy Initiative structure
-interface AzurePolicyInitiative {
+interface AzurePolicyReference {
+  policyDefinitionReferenceId: string;
+  policyDefinitionId: string;
+  parameters: Record<string, { value: string | string[] }>;
+}
+
+interface AzurePolicySetDefinition {
+  type: 'Microsoft.Authorization/policySetDefinitions';
+  apiVersion: '2021-06-01';
+  name: string;
+  dependsOn?: string[];
   properties: {
     displayName: string;
-    policyType: string;
+    policyType: 'Custom';
     description: string;
-    metadata?: Record<string, string>;
-    policyDefinitions: Array<{
-      policyDefinitionId: string;
-      policyDefinition: AzurePolicyDefinition;
-    }>;
-  };
-  tagInheritanceRecommendations: {
-    description: string;
-    builtInPolicies: Array<{
-      displayName: string;
-      policyDefinitionId: string;
-      effect: string;
-      description: string;
-    }>;
-  };
-  managedResourceGroupNotes: {
-    description: string;
-    affectedServices: string[];
+    metadata: Record<string, string>;
+    policyDefinitions: AzurePolicyReference[];
   };
 }
 
-// Import: Azure Policy JSON -> MCP Format
+type AzureResource = AzureCustomPolicyDefinition | AzurePolicySetDefinition;
+
+export interface AzureArmTemplate {
+  $schema: string;
+  contentVersion: string;
+  metadata: Record<string, string>;
+  resources: AzureResource[];
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const CUSTOM_DEF_REQUIRE_TAG = 'require-tag-on-resources';
+const CUSTOM_DEF_REQUIRE_TAG_AND_VALUE = 'require-tag-and-value-on-resources';
+const INITIATIVE_NAME = 'tagging-governance-initiative';
+
+// Subscription-scope ARM template schema: required when the template
+// contains Microsoft.Authorization/policyDefinitions or policySetDefinitions,
+// which cannot be deployed at resource-group scope. Users wanting
+// management-group scope should swap this for the
+// managementGroupDeploymentTemplate.json schema and `az deployment mg create`.
+const ARM_TEMPLATE_SCHEMA = 'https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#';
+
+interface BuiltinInheritancePolicy {
+  guid: string;
+  displayName: string;
+  refIdSuffix: string;  // e.g. 'inherit-from-rg-if-missing'
+  description: string;
+}
+
+const BUILTIN_INHERITANCE_POLICIES: BuiltinInheritancePolicy[] = [
+  {
+    guid: 'cd3aa116-8754-49c9-a813-ad46512ece54',
+    displayName: 'Inherit a tag from the resource group',
+    refIdSuffix: 'inherit-from-rg',
+    description: 'Adds or replaces the tag and value from the parent resource group. Overwrites resource-level values.',
+  },
+  {
+    guid: 'ea3f2387-9b95-492a-a190-fcdc54f7b070',
+    displayName: 'Inherit a tag from the resource group if missing',
+    refIdSuffix: 'inherit-from-rg-if-missing',
+    description: 'Adds the tag from the parent resource group only when the resource has no value for it.',
+  },
+  {
+    guid: 'b27a0cbd-a167-4064-ae47-28c309da4a4f',
+    displayName: 'Inherit a tag from the subscription',
+    refIdSuffix: 'inherit-from-sub',
+    description: 'Adds or replaces the tag and value from the containing subscription. Overwrites resource-level values.',
+  },
+  {
+    guid: '40df99da-1232-49b1-a39a-6571f4e27e24',
+    displayName: 'Inherit a tag from the subscription if missing',
+    refIdSuffix: 'inherit-from-sub-if-missing',
+    description: 'Adds the tag from the containing subscription only when the resource has no value for it.',
+  },
+];
+
+const BUILTIN_INHERITANCE_GUIDS = new Set(BUILTIN_INHERITANCE_POLICIES.map(p => p.guid));
+
+// Reserved Azure tag name prefixes that should not be used.
+const AZURE_RESERVED_TAG_PREFIXES = ['microsoft', 'azure', 'windows'];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// ARM-safe reference ID: keeps letters, digits, hyphens, underscores.
+// Azure policyDefinitionReferenceId must be 1-128 chars from [A-Za-z0-9-_].
+function sanitizeReferenceId(input: string): string {
+  return input.replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 128) || 'ref';
+}
+
+function customDefResourceIdExpression(name: string): string {
+  return `[resourceId('Microsoft.Authorization/policyDefinitions', '${name}')]`;
+}
+
+function builtinPolicyDefinitionId(guid: string): string {
+  return `/providers/Microsoft.Authorization/policyDefinitions/${guid}`;
+}
+
+// ---------------------------------------------------------------------------
+// Builders: parametrized custom definitions
+// ---------------------------------------------------------------------------
+
+function buildRequireTagDefinition(): AzureCustomPolicyDefinition {
+  return {
+    type: 'Microsoft.Authorization/policyDefinitions',
+    apiVersion: '2021-06-01',
+    name: CUSTOM_DEF_REQUIRE_TAG,
+    properties: {
+      displayName: 'Require a tag on resources',
+      policyType: 'Custom',
+      mode: 'Indexed',
+      description: 'Requires that a tag with the specified name be present on resources. The effect parameter controls whether non-compliant resources are denied or audited.',
+      metadata: {
+        category: 'Tags',
+        version: '1.0.0',
+        generatedBy: 'OptimNow Tagging Policy Generator',
+      },
+      parameters: {
+        tagName: {
+          type: 'String',
+          metadata: {
+            displayName: 'Tag Name',
+            description: 'Name of the tag whose presence is required.',
+          },
+        },
+        effect: {
+          type: 'String',
+          metadata: {
+            displayName: 'Effect',
+            description: 'Enforcement effect when the tag is missing.',
+          },
+          allowedValues: ['audit', 'deny', 'disabled'],
+          defaultValue: 'deny',
+        },
+      },
+      policyRule: {
+        if: {
+          field: "[concat('tags[', parameters('tagName'), ']')]",
+          exists: 'false',
+        },
+        then: {
+          effect: "[parameters('effect')]",
+        },
+      },
+    },
+  };
+}
+
+function buildRequireTagAndValueDefinition(): AzureCustomPolicyDefinition {
+  return {
+    type: 'Microsoft.Authorization/policyDefinitions',
+    apiVersion: '2021-06-01',
+    name: CUSTOM_DEF_REQUIRE_TAG_AND_VALUE,
+    properties: {
+      displayName: 'Require a tag and value on resources',
+      policyType: 'Custom',
+      mode: 'Indexed',
+      description: 'Requires that a tag with the specified name be present on resources and that its value belong to an allowed list. The effect parameter controls whether non-compliant resources are denied or audited.',
+      metadata: {
+        category: 'Tags',
+        version: '1.0.0',
+        generatedBy: 'OptimNow Tagging Policy Generator',
+      },
+      parameters: {
+        tagName: {
+          type: 'String',
+          metadata: {
+            displayName: 'Tag Name',
+            description: 'Name of the tag to enforce.',
+          },
+        },
+        allowedValues: {
+          type: 'Array',
+          metadata: {
+            displayName: 'Allowed Values',
+            description: 'List of allowed tag values.',
+          },
+        },
+        effect: {
+          type: 'String',
+          metadata: {
+            displayName: 'Effect',
+            description: 'Enforcement effect when the tag is missing or its value is not in the allowed list.',
+          },
+          allowedValues: ['audit', 'deny', 'disabled'],
+          defaultValue: 'deny',
+        },
+      },
+      policyRule: {
+        if: {
+          anyOf: [
+            {
+              field: "[concat('tags[', parameters('tagName'), ']')]",
+              exists: 'false',
+            },
+            {
+              field: "[concat('tags[', parameters('tagName'), ']')]",
+              notIn: "[parameters('allowedValues')]",
+            },
+          ],
+        },
+        then: {
+          effect: "[parameters('effect')]",
+        },
+      },
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Builders: initiative references
+// ---------------------------------------------------------------------------
+
+function buildEnforcementReference(
+  tag: RequiredTag | OptionalTag,
+  effect: 'deny' | 'audit'
+): AzurePolicyReference {
+  const hasAllowedValues = !!(tag.allowed_values && tag.allowed_values.length > 0);
+  const customDefName = hasAllowedValues
+    ? CUSTOM_DEF_REQUIRE_TAG_AND_VALUE
+    : CUSTOM_DEF_REQUIRE_TAG;
+  const verb = effect === 'deny' ? 'require' : 'audit';
+  const refId = sanitizeReferenceId(
+    `${verb}-${tag.name}${hasAllowedValues ? '-with-values' : ''}`
+  );
+
+  const parameters: AzurePolicyReference['parameters'] = {
+    tagName: { value: tag.name },
+    effect: { value: effect },
+  };
+  if (hasAllowedValues) {
+    parameters.allowedValues = { value: tag.allowed_values as string[] };
+  }
+
+  return {
+    policyDefinitionReferenceId: refId,
+    policyDefinitionId: customDefResourceIdExpression(customDefName),
+    parameters,
+  };
+}
+
+function buildInheritanceReference(
+  tagName: string,
+  builtin: BuiltinInheritancePolicy
+): AzurePolicyReference {
+  return {
+    policyDefinitionReferenceId: sanitizeReferenceId(`${tagName}-${builtin.refIdSuffix}`),
+    policyDefinitionId: builtinPolicyDefinitionId(builtin.guid),
+    parameters: {
+      tagName: { value: tagName },
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Export: MCP Policy -> ARM deployment template
+// ---------------------------------------------------------------------------
+
+export function convertMcpToAzurePolicy(policy: Policy): AzureArmTemplate {
+  const allTags: Array<{ tag: RequiredTag | OptionalTag; effect: 'deny' | 'audit' }> = [
+    ...policy.required_tags.map(tag => ({ tag, effect: 'deny' as const })),
+    ...policy.optional_tags.map(tag => ({ tag, effect: 'audit' as const })),
+  ];
+
+  const anyTagUsesAllowedValues = allTags.some(
+    ({ tag }) => tag.allowed_values && tag.allowed_values.length > 0
+  );
+
+  // Custom definitions
+  const resources: AzureResource[] = [];
+  resources.push(buildRequireTagDefinition());
+  if (anyTagUsesAllowedValues) {
+    resources.push(buildRequireTagAndValueDefinition());
+  }
+
+  // Initiative references: enforcement first, then inheritance per tag per built-in.
+  const enforcementRefs: AzurePolicyReference[] = allTags.map(({ tag, effect }) =>
+    buildEnforcementReference(tag, effect)
+  );
+  const inheritanceRefs: AzurePolicyReference[] = allTags.flatMap(({ tag }) =>
+    BUILTIN_INHERITANCE_POLICIES.map(builtin => buildInheritanceReference(tag.name, builtin))
+  );
+
+  const initiativeDependsOn: string[] = [customDefResourceIdExpression(CUSTOM_DEF_REQUIRE_TAG)];
+  if (anyTagUsesAllowedValues) {
+    initiativeDependsOn.push(customDefResourceIdExpression(CUSTOM_DEF_REQUIRE_TAG_AND_VALUE));
+  }
+
+  const initiative: AzurePolicySetDefinition = {
+    type: 'Microsoft.Authorization/policySetDefinitions',
+    apiVersion: '2021-06-01',
+    name: INITIATIVE_NAME,
+    dependsOn: initiativeDependsOn,
+    properties: {
+      displayName: 'Tagging Governance Initiative',
+      policyType: 'Custom',
+      description: 'Enforces required tags, audits optional tags, and inherits tags from resource group and subscription scopes. Generated by OptimNow Tagging Policy Generator.',
+      metadata: {
+        category: 'Tags',
+        version: policy.version,
+        generatedBy: 'OptimNow Tagging Policy Generator',
+      },
+      policyDefinitions: [...enforcementRefs, ...inheritanceRefs],
+    },
+  };
+  resources.push(initiative);
+
+  return {
+    $schema: ARM_TEMPLATE_SCHEMA,
+    contentVersion: '1.0.0.0',
+    metadata: {
+      generatedBy: 'OptimNow Tagging Policy Generator',
+      policyVersion: policy.version,
+      deploymentScope: 'subscription (or management group with management-group schema)',
+      cliExample: "az deployment sub create --location <region> --template-file azure_tagging_bundle.json",
+    },
+    resources,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Import: ARM bundle or standalone Policy Set Definition -> MCP Policy
+// ---------------------------------------------------------------------------
+
+const LEGACY_FORMAT_ERROR =
+  "Unsupported Azure policy shape. The importer only accepts an ARM deployment template (with `resources[]`) or a standalone Microsoft.Authorization/policySetDefinitions object generated by this tool. Re-export from the latest tool version.";
+
 export function convertAzurePolicyToMcp(azurePolicyString: string): Policy {
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(azurePolicyString);
   } catch {
-    throw new Error("Invalid JSON format. Please paste valid Azure Policy JSON.");
+    throw new Error('Invalid JSON format. Please paste valid Azure Policy JSON.');
+  }
+
+  const policySetProperties = locatePolicySetProperties(parsed);
+  if (!policySetProperties) {
+    throw new Error(LEGACY_FORMAT_ERROR);
+  }
+
+  const refs = policySetProperties.policyDefinitions;
+  if (!Array.isArray(refs)) {
+    throw new Error(LEGACY_FORMAT_ERROR);
   }
 
   const requiredTags: RequiredTag[] = [];
   const optionalTags: OptionalTag[] = [];
 
-  // Detect format: initiative (has policyDefinitions) or single policy definition
-  const props = (parsed as { properties?: Record<string, unknown> }).properties || parsed;
-  const policyDefs = (props as { policyDefinitions?: Array<{ policyDefinition?: AzurePolicyDefinition; policyDefinitionId?: string }> }).policyDefinitions;
+  for (const ref of refs) {
+    const refObj = ref as Record<string, unknown>;
+    const definitionId = typeof refObj.policyDefinitionId === 'string' ? refObj.policyDefinitionId : '';
+    if (referencesBuiltinInheritance(definitionId)) continue;  // scaffolding, not user intent
 
-  if (policyDefs && Array.isArray(policyDefs)) {
-    // Initiative format: iterate policy definitions
-    for (const entry of policyDefs) {
-      const def = entry.policyDefinition || entry as unknown as AzurePolicyDefinition;
-      const defProps = (def as { properties?: AzurePolicyDefinition['properties'] }).properties || def as unknown as AzurePolicyDefinition['properties'];
-      extractTagFromDefinition(defProps, requiredTags, optionalTags);
+    const parameters = (refObj.parameters as Record<string, { value?: unknown }> | undefined) || {};
+    const tagNameValue = parameters.tagName?.value;
+    if (typeof tagNameValue !== 'string' || tagNameValue.length === 0) continue;
+
+    const effectValue = parameters.effect?.value;
+    const effect = typeof effectValue === 'string' ? effectValue.toLowerCase() : 'deny';
+
+    const allowedValuesRaw = parameters.allowedValues?.value;
+    const allowedValues = Array.isArray(allowedValuesRaw)
+      ? allowedValuesRaw.filter((v): v is string => typeof v === 'string')
+      : null;
+
+    const refIdRaw = refObj.policyDefinitionReferenceId;
+    const description = typeof refIdRaw === 'string' && refIdRaw.length > 0
+      ? `Imported from ${refIdRaw}`
+      : `Imported tag ${tagNameValue}`;
+
+    if (effect === 'audit') {
+      optionalTags.push({
+        name: tagNameValue,
+        description,
+        allowed_values: allowedValues && allowedValues.length > 0 ? allowedValues : null,
+      });
+    } else {
+      requiredTags.push({
+        name: tagNameValue,
+        description,
+        allowed_values: allowedValues && allowedValues.length > 0 ? allowedValues : null,
+        validation_regex: null,
+        applies_to: [],
+      });
     }
-  } else if ((props as { policyRule?: unknown }).policyRule) {
-    // Single policy definition
-    extractTagFromDefinition(props as AzurePolicyDefinition['properties'], requiredTags, optionalTags);
-  } else {
-    throw new Error("Invalid Azure Policy format. Expected policyDefinitions array or a single policy definition with policyRule.");
   }
 
   if (requiredTags.length === 0 && optionalTags.length === 0) {
-    throw new Error("No tag requirements found in the Azure Policy. Ensure policy definitions include tagName parameters.");
+    throw new Error(
+      'No tag enforcement references found in the policy set. Ensure the initiative references the parametrized custom tag definitions.'
+    );
   }
 
   return {
-    version: "1.0",
+    version: '1.0',
     last_updated: new Date().toISOString(),
     cloud_provider: 'azure',
     required_tags: requiredTags,
@@ -99,114 +440,63 @@ export function convertAzurePolicyToMcp(azurePolicyString: string): Policy {
   };
 }
 
-function extractTagFromDefinition(
-  defProps: AzurePolicyDefinition['properties'],
-  requiredTags: RequiredTag[],
-  optionalTags: OptionalTag[]
-) {
-  if (!defProps || !defProps.parameters) return;
-
-  const tagNameParam = defProps.parameters.tagName || defProps.parameters.TagName;
-  if (!tagNameParam) return;
-
-  const tagName = tagNameParam.defaultValue as string || 'UnknownTag';
-  const description = defProps.description || defProps.displayName || `Imported from Azure Policy - ${tagName}`;
-  const effect = defProps.policyRule?.then?.effect || 'deny';
-
-  // Extract allowed values
-  const allowedValuesParam = defProps.parameters.allowedValues || defProps.parameters.AllowedValues;
-  const allowedValues = allowedValuesParam?.defaultValue as string[] | undefined;
-
-  if (effect.toLowerCase() === 'audit') {
-    optionalTags.push({
-      name: tagName,
-      description,
-      allowed_values: allowedValues && allowedValues.length > 0 ? allowedValues : null,
-    });
-  } else {
-    // deny, modify, or any other effect -> required
-    requiredTags.push({
-      name: tagName,
-      description,
-      allowed_values: allowedValues && allowedValues.length > 0 ? allowedValues : null,
-      validation_regex: null,
-      applies_to: [],
-    });
+function locatePolicySetProperties(
+  parsed: Record<string, unknown>
+): { policyDefinitions: unknown[] } | null {
+  // Case 1: ARM deployment template with resources[]
+  const resources = (parsed as { resources?: unknown }).resources;
+  if (Array.isArray(resources)) {
+    for (const resource of resources) {
+      const r = resource as Record<string, unknown>;
+      if (r.type === 'Microsoft.Authorization/policySetDefinitions') {
+        const props = r.properties as Record<string, unknown> | undefined;
+        if (props && Array.isArray(props.policyDefinitions)) {
+          return { policyDefinitions: props.policyDefinitions as unknown[] };
+        }
+      }
+    }
+    return null;
   }
+
+  // Case 2: standalone Microsoft.Authorization/policySetDefinitions object
+  if (parsed.type === 'Microsoft.Authorization/policySetDefinitions') {
+    const props = parsed.properties as Record<string, unknown> | undefined;
+    if (props && Array.isArray(props.policyDefinitions)) {
+      return { policyDefinitions: props.policyDefinitions as unknown[] };
+    }
+  }
+
+  return null;
 }
 
-// Export: MCP Format -> Azure Policy Initiative
-export function convertMcpToAzurePolicy(policy: Policy): AzurePolicyInitiative {
-  const policyDefinitions: AzurePolicyInitiative['properties']['policyDefinitions'] = [];
-
-  // Generate policy definitions for required tags (deny effect)
-  for (const tag of policy.required_tags) {
-    policyDefinitions.push({
-      policyDefinitionId: `custom-require-${tag.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-      policyDefinition: buildPolicyDefinition(tag.name, tag.description, 'deny', tag.allowed_values),
-    });
+function referencesBuiltinInheritance(policyDefinitionId: string): boolean {
+  for (const guid of BUILTIN_INHERITANCE_GUIDS) {
+    if (policyDefinitionId.includes(guid)) return true;
   }
+  return false;
+}
 
-  // Generate policy definitions for optional tags (audit effect)
-  for (const tag of policy.optional_tags) {
-    policyDefinitions.push({
-      policyDefinitionId: `custom-audit-${tag.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-      policyDefinition: buildPolicyDefinition(tag.name, tag.description, 'audit', tag.allowed_values),
-    });
-  }
+// ---------------------------------------------------------------------------
+// Single-tag portal-paste helper (used by TagForm "Copy as Azure Policy" button)
+// ---------------------------------------------------------------------------
 
-  return {
-    properties: {
-      displayName: "Tagging Governance Initiative",
-      policyType: "Custom",
-      description: "Ensures all resources have required tags for cost attribution and governance. Generated by OptimNow Tagging Policy Generator.",
-      metadata: {
-        category: "Tags",
-        version: policy.version,
-        generatedBy: "OptimNow Tagging Policy Generator",
-      },
-      policyDefinitions,
-    },
-    tagInheritanceRecommendations: {
-      description: "Consider enabling these built-in Azure Policies for tag inheritance to improve cost attribution coverage, especially for managed resource groups (AKS, Databricks, etc.)",
-      builtInPolicies: [
-        {
-          displayName: "Inherit a tag from the resource group",
-          policyDefinitionId: "cd3aa116-8754-49c9-a813-ad46512ece54",
-          effect: "Modify",
-          description: "Adds or replaces the specified tag and value from the parent resource group when any resource is created or updated.",
-        },
-        {
-          displayName: "Inherit a tag from the resource group if missing",
-          policyDefinitionId: "ea3f2387-9b95-492a-a190-fcdc54f7b070",
-          effect: "Modify",
-          description: "Adds the specified tag from the parent resource group only when the tag is missing on the resource. Existing resources can be remediated.",
-        },
-        {
-          displayName: "Inherit a tag from the subscription",
-          policyDefinitionId: "b27a0cbd-a167-4064-ae47-28c309da4a4f",
-          effect: "Modify",
-          description: "Adds or replaces the specified tag and value from the containing subscription when any resource is created or updated.",
-        },
-        {
-          displayName: "Inherit a tag from the subscription if missing",
-          policyDefinitionId: "40df99da-1232-49b1-a39a-6571f4e27e24",
-          effect: "Modify",
-          description: "Adds the specified tag from the containing subscription only when the tag is missing on the resource.",
-        },
-      ],
-    },
-    managedResourceGroupNotes: {
-      description: "These Azure services create managed resource groups (e.g. MC_ for AKS) with resources that have limited tagging permissions. Use tag inheritance policies from the resource group level to ensure cost attribution coverage.",
-      affectedServices: [
-        "AKS (Microsoft.ContainerService/managedClusters) - creates MC_{rgname}_{clustername}_{location}",
-        "Azure Databricks (Microsoft.Databricks/workspaces)",
-        "Azure Synapse Analytics (Microsoft.Synapse/workspaces)",
-        "Azure Machine Learning (Microsoft.MachineLearningServices/workspaces)",
-        "Azure Managed Applications",
-        "App Service Environment",
-      ],
-    },
+// Standalone policy-definition shape (legacy, used only by the portal helper).
+interface AzurePolicyDefinitionStandalone {
+  properties: {
+    displayName: string;
+    policyType: string;
+    mode: string;
+    description: string;
+    metadata?: Record<string, string>;
+    parameters: Record<string, {
+      type: string;
+      metadata: { displayName: string; description: string };
+      defaultValue: string | string[];
+    }>;
+    policyRule: {
+      if: Record<string, unknown>;
+      then: { effect: string };
+    };
   };
 }
 
@@ -215,13 +505,13 @@ function buildPolicyDefinition(
   description: string,
   effect: string,
   allowedValues: string[] | null
-): AzurePolicyDefinition {
-  const parameters: AzurePolicyDefinition['properties']['parameters'] = {
+): AzurePolicyDefinitionStandalone {
+  const parameters: AzurePolicyDefinitionStandalone['properties']['parameters'] = {
     tagName: {
-      type: "String",
+      type: 'String',
       metadata: {
-        displayName: "Tag Name",
-        description: "Name of the tag to enforce",
+        displayName: 'Tag Name',
+        description: 'Name of the tag to enforce',
       },
       defaultValue: tagName,
     },
@@ -229,55 +519,50 @@ function buildPolicyDefinition(
 
   if (allowedValues && allowedValues.length > 0) {
     parameters.allowedValues = {
-      type: "Array",
+      type: 'Array',
       metadata: {
-        displayName: "Allowed Values",
-        description: "List of allowed tag values",
+        displayName: 'Allowed Values',
+        description: 'List of allowed tag values',
       },
       defaultValue: allowedValues,
     };
   }
 
-  // Build policy rule
-  // When allowedValues are present, enforce both tag existence AND value validation
-  const policyRule: AzurePolicyDefinition['properties']['policyRule'] = allowedValues && allowedValues.length > 0
-    ? {
-        if: {
-          anyOf: [
-            {
-              field: "[concat('tags[', parameters('tagName'), ']')]",
-              exists: "false",
-            },
-            {
-              field: "[concat('tags[', parameters('tagName'), ']')]",
-              notIn: "[parameters('allowedValues')]",
-            },
-          ],
-        },
-        then: {
-          effect,
-        },
-      }
-    : {
-        if: {
-          field: "[concat('tags[', parameters('tagName'), ']')]",
-          exists: "false",
-        },
-        then: {
-          effect,
-        },
-      };
+  const policyRule: AzurePolicyDefinitionStandalone['properties']['policyRule'] =
+    allowedValues && allowedValues.length > 0
+      ? {
+          if: {
+            anyOf: [
+              {
+                field: "[concat('tags[', parameters('tagName'), ']')]",
+                exists: 'false',
+              },
+              {
+                field: "[concat('tags[', parameters('tagName'), ']')]",
+                notIn: "[parameters('allowedValues')]",
+              },
+            ],
+          },
+          then: { effect },
+        }
+      : {
+          if: {
+            field: "[concat('tags[', parameters('tagName'), ']')]",
+            exists: 'false',
+          },
+          then: { effect },
+        };
 
   return {
     properties: {
       displayName: `${effect === 'deny' ? 'Require' : 'Audit'} ${tagName} tag on resources`,
-      policyType: "Custom",
-      mode: "Indexed",
+      policyType: 'Custom',
+      mode: 'Indexed',
       description,
       metadata: {
-        category: "Tags",
-        version: "1.0.0",
-        generatedBy: "OptimNow Tagging Policy Generator",
+        category: 'Tags',
+        version: '1.0.0',
+        generatedBy: 'OptimNow Tagging Policy Generator',
       },
       parameters,
       policyRule,
@@ -286,8 +571,7 @@ function buildPolicyDefinition(
 }
 
 // Generate Azure Portal-ready JSON for a single tag definition.
-// This is the exact format you paste into the Azure Portal Policy Rule editor:
-// a single JSON object with mode, parameters, and policyRule together.
+// Pasted into the Azure Portal Policy Rule editor: mode, parameters, policyRule.
 export function generateAzurePortalJson(
   tagName: string,
   description: string,
@@ -302,41 +586,51 @@ export function generateAzurePortalJson(
   };
 }
 
-// Export warnings for features that won't be preserved in Azure format
-export function getAzureExportWarnings(policy: Policy): string[] {
-  const warnings: string[] = [];
+// ---------------------------------------------------------------------------
+// Export warnings
+// ---------------------------------------------------------------------------
 
-  // Regex validation not supported
+export function getAzureExportWarnings(policy: Policy): CategorizedExportWarnings {
+  const limitations: string[] = [];
+  const deploymentNotes: string[] = [];
+  const allTags = [...policy.required_tags, ...policy.optional_tags];
+
+  // --- Limitations: feature loss when converting to Azure format ---
+
   const tagsWithRegex = policy.required_tags.filter(t => t.validation_regex);
   if (tagsWithRegex.length > 0) {
     const tagNames = tagsWithRegex.map(t => t.name).join(', ');
-    warnings.push(`Regex validation will be lost for: ${tagNames}. Azure Policy doesn't support regex — use allowedValues or Azure Policy pattern matching instead.`);
+    limitations.push(`Regex validation will be dropped for ${tagNames}. Azure Policy has no regex support — use allowedValues instead, or chain a Match() condition in a custom policy.`);
   }
 
-  // Tag name length limits
-  const allTags = [...policy.required_tags, ...policy.optional_tags];
   const longNames = allTags.filter(t => t.name.length > 512);
   if (longNames.length > 0) {
-    warnings.push(`Tag names exceed Azure's 512-character limit: ${longNames.map(t => t.name).join(', ')}`);
+    limitations.push(`Tag names exceed Azure's 512-character limit: ${longNames.map(t => t.name).join(', ')}.`);
   }
 
-  // Total tag count
+  const reservedPrefixHits = allTags.filter(t =>
+    AZURE_RESERVED_TAG_PREFIXES.some(p => t.name.toLowerCase().startsWith(p))
+  );
+  if (reservedPrefixHits.length > 0) {
+    limitations.push(`Tag names use Azure reserved prefixes (microsoft/azure/windows): ${reservedPrefixHits.map(t => t.name).join(', ')}. Azure will reject these.`);
+  }
+
   if (allTags.length > 50) {
-    warnings.push(`Your policy defines ${allTags.length} tags. Azure resources support a maximum of 50 tags.`);
+    limitations.push(`Your policy defines ${allTags.length} tags but Azure resources accept a maximum of 50 tags each.`);
   }
 
-  // Storage account tag name limit
   const hasStorageResources = policy.required_tags.some(t =>
     t.applies_to?.some(r => r.includes('Microsoft.Storage'))
   );
   if (hasStorageResources) {
     const longStorageNames = allTags.filter(t => t.name.length > 128);
     if (longStorageNames.length > 0) {
-      warnings.push(`Storage accounts limit tag names to 128 characters. These exceed that: ${longStorageNames.map(t => t.name).join(', ')}`);
+      limitations.push(`Storage accounts cap tag names at 128 characters. These exceed it: ${longStorageNames.map(t => t.name).join(', ')}.`);
     }
   }
 
-  // Managed resource groups note
+  // --- Deployment notes: operational guidance for the generated bundle ---
+
   const hasManagedRgServices = policy.required_tags.some(t =>
     t.applies_to?.some(r =>
       r.includes('Microsoft.ContainerService/managedClusters') ||
@@ -346,11 +640,21 @@ export function getAzureExportWarnings(policy: Policy): string[] {
     )
   );
   if (hasManagedRgServices) {
-    warnings.push('Some selected resource types (AKS, Databricks, Synapse, Azure ML) create managed resource groups with resources you cannot directly tag. Enable tag inheritance policies from the resource group level.');
+    deploymentNotes.push('You target AKS, Databricks, Synapse, or Azure ML — these create managed resource groups whose inner resources you cannot tag directly. The bundle\'s inheritance references will catch the resources Azure does expose to policy.');
   }
 
-  // FOCUS cost export gap note
-  warnings.push('Note: Even with high tag compliance, Azure FOCUS cost exports may show untagged billing lines. Consider subscription-naming-convention-based transformations in Power BI for full cost attribution coverage.');
+  const tagCount = allTags.length;
+  if (tagCount > 0) {
+    const totalRefs = tagCount * 5;
+    deploymentNotes.push(
+      `The initiative contains ${totalRefs} references (${tagCount} enforcement + ${tagCount * 4} inheritance). Deploy at management-group scope for org-wide coverage, or subscription scope for narrower rollout.`
+    );
+    deploymentNotes.push(
+      'Inheritance is baked in via 4 built-in policies per tag: RG always (cd3aa116…), RG if-missing (ea3f2387…), Sub always (b27a0cbd…), Sub if-missing (40df99da…). The "always" variants overwrite resource-level tag values; remove references that conflict with your governance model before deploying.'
+    );
+  }
 
-  return warnings;
+  deploymentNotes.push('Azure FOCUS cost exports may still show untagged billing lines for managed-RG and platform resources even at full tag compliance. Layer on subscription-naming-convention transformations in Power BI for full cost attribution coverage.');
+
+  return { limitations, deploymentNotes };
 }

@@ -1,4 +1,4 @@
-import { Policy, RequiredTag, OptionalTag } from '../types';
+import { Policy, RequiredTag, OptionalTag, CategorizedExportWarnings } from '../types';
 
 // GCP Label Policy format for import/export
 interface GcpLabelConfig {
@@ -121,28 +121,29 @@ export function convertMcpToGcpPolicy(policy: Policy): GcpLabelPolicy {
 }
 
 // Export warnings for features that won't be preserved in GCP format
-export function getGcpExportWarnings(policy: Policy): string[] {
-  const warnings: string[] = [];
+export function getGcpExportWarnings(policy: Policy): CategorizedExportWarnings {
+  const limitations: string[] = [];
+  const deploymentNotes: string[] = [];
 
   const tagsWithRegex = policy.required_tags.filter(t => t.validation_regex);
   if (tagsWithRegex.length > 0) {
     const tagNames = tagsWithRegex.map(t => t.name).join(', ');
-    warnings.push(`Regex validation will be lost for: ${tagNames}. GCP Label Policies don't support regex patterns.`);
+    limitations.push(`Regex validation will be dropped for ${tagNames}. GCP Label Policies have no regex support.`);
   }
 
   const allTags = [...policy.required_tags, ...policy.optional_tags];
   const upperCaseKeys = allTags.filter(t => t.name !== t.name.toLowerCase());
   if (upperCaseKeys.length > 0) {
     const names = upperCaseKeys.map(t => t.name).join(', ');
-    warnings.push(`Label keys will be lowercased: ${names}. GCP labels must be lowercase.`);
+    limitations.push(`Label keys will be lowercased on export: ${names}. GCP requires lowercase keys.`);
   }
 
   if (policy.tag_naming_rules.max_key_length > 63) {
-    warnings.push(`Max key length (${policy.tag_naming_rules.max_key_length}) exceeds GCP limit of 63. It will be capped.`);
+    limitations.push(`Max key length (${policy.tag_naming_rules.max_key_length}) exceeds GCP's hard limit of 63. It will be capped.`);
   }
   if (policy.tag_naming_rules.max_value_length > 63) {
-    warnings.push(`Max value length (${policy.tag_naming_rules.max_value_length}) exceeds GCP limit of 63. It will be capped.`);
+    limitations.push(`Max value length (${policy.tag_naming_rules.max_value_length}) exceeds GCP's hard limit of 63. It will be capped.`);
   }
 
-  return warnings;
+  return { limitations, deploymentNotes };
 }

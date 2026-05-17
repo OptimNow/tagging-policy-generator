@@ -1,4 +1,4 @@
-import { Policy, RequiredTag, OptionalTag } from '../types';
+import { Policy, RequiredTag, OptionalTag, CategorizedExportWarnings } from '../types';
 
 export function convertAwsPolicyToMcp(awsPolicyString: string): Policy {
   let awsPolicy;
@@ -329,14 +329,15 @@ export function convertMcpToAwsPolicy(policy: Policy): AwsTagPolicy {
 /**
  * Check if the policy has features that won't be preserved in AWS format
  */
-export function getAwsExportWarnings(policy: Policy): string[] {
-  const warnings: string[] = [];
+export function getAwsExportWarnings(policy: Policy): CategorizedExportWarnings {
+  const limitations: string[] = [];
+  const deploymentNotes: string[] = [];
 
   const tagsWithRegex = policy.required_tags.filter(t => t.validation_regex);
   if (tagsWithRegex.length > 0) {
     const tagNames = tagsWithRegex.map(t => t.name).join(', ');
-    warnings.push(`Regex validation will be lost for: ${tagNames}. AWS Tag Policies don't support regex patterns.`);
+    limitations.push(`Regex validation will be dropped for ${tagNames}. AWS Tag Policies have no regex support — rely on allowed_values instead.`);
   }
 
-  return warnings;
+  return { limitations, deploymentNotes };
 }

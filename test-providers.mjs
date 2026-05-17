@@ -179,7 +179,7 @@ try {
 
 // GCP Export Warnings
 const gcpWarnings = getGcpExportWarnings(gcpTestPolicy);
-assert(gcpWarnings.some(w => w.toLowerCase().includes('regex')), 'GCP export warns about regex loss');
+assert(gcpWarnings.limitations.some(w => w.toLowerCase().includes('regex')), 'GCP export warns about regex loss');
 
 // GCP Round-trip
 try {
@@ -244,28 +244,50 @@ const azureTestPolicy = {
 
 try {
   const exported = convertMcpToAzurePolicy(azureTestPolicy);
-  const defs = exported.properties?.policyDefinitions;
-  assert(defs !== undefined, 'Azure export has policyDefinitions array');
-  assert(defs.length >= 2, 'Azure export: >= 2 policy definitions (got ' + defs.length + ')');
-  assert(exported.tagInheritanceRecommendations !== undefined, 'Azure export includes tagInheritanceRecommendations');
-  assert(exported.managedResourceGroupNotes !== undefined, 'Azure export includes managedResourceGroupNotes');
 
-  // Check that required tag becomes deny effect
-  const costCenterDef = defs.find(d =>
-    d.policyDefinition?.properties?.parameters?.tagName?.defaultValue === 'CostCenter'
-  );
-  assert(costCenterDef !== undefined, 'Azure export: CostCenter policy definition exists');
-  assert(costCenterDef?.policyDefinition?.properties?.policyRule?.then?.effect === 'deny', 'Azure export: required tag uses deny effect');
+  // New ARM deployment template shape
+  assert(typeof exported.$schema === 'string' && exported.$schema.includes('subscriptionDeploymentTemplate'), 'Azure export uses subscription-scope ARM template schema');
+  assert(exported.contentVersion === '1.0.0.0', 'Azure export has contentVersion 1.0.0.0');
+  assert(Array.isArray(exported.resources), 'Azure export has resources array');
 
-  // Check that optional tag becomes audit effect
-  const teamDef = defs.find(d =>
-    d.policyDefinition?.properties?.parameters?.tagName?.defaultValue === 'Team'
-  );
-  assert(teamDef !== undefined, 'Azure export: Team policy definition exists');
-  assert(teamDef?.policyDefinition?.properties?.policyRule?.then?.effect === 'audit', 'Azure export: optional tag uses audit effect');
+  // Custom definitions: require-tag (always) + require-tag-and-value (CostCenter has allowed_values)
+  const customDefs = exported.resources.filter(r => r.type === 'Microsoft.Authorization/policyDefinitions');
+  assert(customDefs.length === 2, 'Azure export: 2 parametrized custom defs (with-values present, got ' + customDefs.length + ')');
+  assert(customDefs.some(d => d.name === 'require-tag-on-resources'), 'Azure export: emits require-tag-on-resources');
+  assert(customDefs.some(d => d.name === 'require-tag-and-value-on-resources'), 'Azure export: emits require-tag-and-value-on-resources');
 
-  // Check inheritance recommendations
-  assert(exported.tagInheritanceRecommendations.builtInPolicies.length >= 4, 'Azure export: >= 4 inheritance recommendations');
+  // Initiative
+  const initiatives = exported.resources.filter(r => r.type === 'Microsoft.Authorization/policySetDefinitions');
+  assert(initiatives.length === 1, 'Azure export: exactly 1 policy set definition');
+  const initiative = initiatives[0];
+  assert(Array.isArray(initiative.dependsOn) && initiative.dependsOn.length === 2, 'Azure export: initiative dependsOn lists both custom defs');
+
+  const refs = initiative.properties.policyDefinitions;
+  // 1 required (CostCenter) + 1 optional (Team) = 2 enforcement + 2*4 = 8 inheritance = 10 refs
+  assert(refs.length === 10, 'Azure export: 10 initiative references (2 enforcement + 8 inheritance, got ' + refs.length + ')');
+
+  // Required tag becomes deny effect
+  const costCenterRef = refs.find(r => r.policyDefinitionReferenceId === 'require-CostCenter-with-values');
+  assert(costCenterRef !== undefined, 'Azure export: CostCenter enforcement reference exists');
+  assert(costCenterRef?.parameters?.effect?.value === 'deny', 'Azure export: required tag uses deny effect');
+  assert(costCenterRef?.parameters?.tagName?.value === 'CostCenter', 'Azure export: tagName param value is CostCenter');
+  assert(Array.isArray(costCenterRef?.parameters?.allowedValues?.value) && costCenterRef.parameters.allowedValues.value.includes('Engineering'), 'Azure export: allowedValues param carries the values');
+  assert(costCenterRef?.policyDefinitionId?.includes('require-tag-and-value-on-resources'), 'Azure export: CostCenter ref points to with-values custom def');
+
+  // Optional tag becomes audit effect
+  const teamRef = refs.find(r => r.policyDefinitionReferenceId === 'audit-Team');
+  assert(teamRef !== undefined, 'Azure export: Team enforcement reference exists');
+  assert(teamRef?.parameters?.effect?.value === 'audit', 'Azure export: optional tag uses audit effect');
+  assert(teamRef?.policyDefinitionId?.includes('require-tag-on-resources'), 'Azure export: Team ref points to plain require-tag custom def (no allowed_values)');
+
+  // Inheritance: 4 built-in GUIDs referenced per tag
+  const inheritanceGuids = ['cd3aa116', 'ea3f2387', 'b27a0cbd', '40df99da'];
+  for (const tagName of ['CostCenter', 'Team']) {
+    for (const guid of inheritanceGuids) {
+      const inheritRef = refs.find(r => r.policyDefinitionId.includes(guid) && r.parameters?.tagName?.value === tagName);
+      assert(inheritRef !== undefined, 'Azure export: inheritance ref for ' + tagName + ' + GUID ' + guid + ' present');
+    }
+  }
 } catch (e) {
   failed++;
   console.log('  FAIL: Azure export threw: ' + e.message);
@@ -273,7 +295,9 @@ try {
 
 // Azure Export Warnings
 const azureWarnings = getAzureExportWarnings(azureTestPolicy);
-assert(azureWarnings.some(w => w.toLowerCase().includes('regex')), 'Azure export warns about regex loss');
+assert(azureWarnings.limitations.some(w => w.toLowerCase().includes('regex')), 'Azure export warns about regex loss (limitations)');
+assert(azureWarnings.deploymentNotes.some(w => w.toLowerCase().includes('inheritance')), 'Azure export surfaces inheritance deployment note');
+assert(azureWarnings.deploymentNotes.some(w => w.toLowerCase().includes('references')), 'Azure export surfaces reference-count deployment note');
 
 // Azure Round-trip
 try {
