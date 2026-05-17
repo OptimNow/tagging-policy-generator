@@ -179,7 +179,7 @@ try {
 
 // GCP Export Warnings
 const gcpWarnings = getGcpExportWarnings(gcpTestPolicy);
-assert(gcpWarnings.some(w => w.toLowerCase().includes('regex')), 'GCP export warns about regex loss');
+assert(gcpWarnings.limitations.some(w => w.toLowerCase().includes('regex')), 'GCP export warns about regex loss');
 
 // GCP Round-trip
 try {
@@ -295,7 +295,9 @@ try {
 
 // Azure Export Warnings
 const azureWarnings = getAzureExportWarnings(azureTestPolicy);
-assert(azureWarnings.some(w => w.toLowerCase().includes('regex')), 'Azure export warns about regex loss');
+assert(azureWarnings.limitations.some(w => w.toLowerCase().includes('regex')), 'Azure export warns about regex loss (limitations)');
+assert(azureWarnings.deploymentNotes.some(w => w.toLowerCase().includes('inheritance')), 'Azure export surfaces inheritance deployment note');
+assert(azureWarnings.deploymentNotes.some(w => w.toLowerCase().includes('references')), 'Azure export surfaces reference-count deployment note');
 
 // Azure Round-trip
 try {

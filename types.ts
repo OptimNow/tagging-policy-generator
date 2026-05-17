@@ -1,5 +1,13 @@
 export type CloudProvider = 'aws' | 'gcp' | 'azure';
 
+// Warnings shown to the user before downloading a native-format policy.
+// `limitations` describe features that won't be preserved in the target format.
+// `deploymentNotes` are operational/scope guidance — not feature loss.
+export interface CategorizedExportWarnings {
+  limitations: string[];
+  deploymentNotes: string[];
+}
+
 export interface TagNamingRules {
   case_sensitivity: boolean;
   allow_special_characters: boolean;

@@ -1,4 +1,4 @@
-import { Policy, RequiredTag, OptionalTag } from '../types';
+import { Policy, RequiredTag, OptionalTag, CategorizedExportWarnings } from '../types';
 
 // ---------------------------------------------------------------------------
 // ARM deployment template shapes (export target)
@@ -590,48 +590,47 @@ export function generateAzurePortalJson(
 // Export warnings
 // ---------------------------------------------------------------------------
 
-export function getAzureExportWarnings(policy: Policy): string[] {
-  const warnings: string[] = [];
+export function getAzureExportWarnings(policy: Policy): CategorizedExportWarnings {
+  const limitations: string[] = [];
+  const deploymentNotes: string[] = [];
   const allTags = [...policy.required_tags, ...policy.optional_tags];
 
-  // Regex validation not supported
+  // --- Limitations: feature loss when converting to Azure format ---
+
   const tagsWithRegex = policy.required_tags.filter(t => t.validation_regex);
   if (tagsWithRegex.length > 0) {
     const tagNames = tagsWithRegex.map(t => t.name).join(', ');
-    warnings.push(`Regex validation will be lost for: ${tagNames}. Azure Policy doesn't support regex — use allowedValues or chain a separate Match() condition instead.`);
+    limitations.push(`Regex validation will be dropped for ${tagNames}. Azure Policy has no regex support — use allowedValues instead, or chain a Match() condition in a custom policy.`);
   }
 
-  // Tag name length
   const longNames = allTags.filter(t => t.name.length > 512);
   if (longNames.length > 0) {
-    warnings.push(`Tag names exceed Azure's 512-character limit: ${longNames.map(t => t.name).join(', ')}`);
+    limitations.push(`Tag names exceed Azure's 512-character limit: ${longNames.map(t => t.name).join(', ')}.`);
   }
 
-  // Reserved prefixes
   const reservedPrefixHits = allTags.filter(t =>
     AZURE_RESERVED_TAG_PREFIXES.some(p => t.name.toLowerCase().startsWith(p))
   );
   if (reservedPrefixHits.length > 0) {
-    warnings.push(`Tag names use Azure reserved prefixes (microsoft/azure/windows): ${reservedPrefixHits.map(t => t.name).join(', ')}. Azure may reject these.`);
+    limitations.push(`Tag names use Azure reserved prefixes (microsoft/azure/windows): ${reservedPrefixHits.map(t => t.name).join(', ')}. Azure will reject these.`);
   }
 
-  // Total tag count
   if (allTags.length > 50) {
-    warnings.push(`Your policy defines ${allTags.length} tags. Azure resources support a maximum of 50 tags per resource.`);
+    limitations.push(`Your policy defines ${allTags.length} tags but Azure resources accept a maximum of 50 tags each.`);
   }
 
-  // Storage account tag name limit
   const hasStorageResources = policy.required_tags.some(t =>
     t.applies_to?.some(r => r.includes('Microsoft.Storage'))
   );
   if (hasStorageResources) {
     const longStorageNames = allTags.filter(t => t.name.length > 128);
     if (longStorageNames.length > 0) {
-      warnings.push(`Storage accounts limit tag names to 128 characters. These exceed that: ${longStorageNames.map(t => t.name).join(', ')}`);
+      limitations.push(`Storage accounts cap tag names at 128 characters. These exceed it: ${longStorageNames.map(t => t.name).join(', ')}.`);
     }
   }
 
-  // Managed resource groups
+  // --- Deployment notes: operational guidance for the generated bundle ---
+
   const hasManagedRgServices = policy.required_tags.some(t =>
     t.applies_to?.some(r =>
       r.includes('Microsoft.ContainerService/managedClusters') ||
@@ -641,23 +640,21 @@ export function getAzureExportWarnings(policy: Policy): string[] {
     )
   );
   if (hasManagedRgServices) {
-    warnings.push('Selected resource types (AKS, Databricks, Synapse, Azure ML) create managed resource groups whose inner resources cannot be tagged directly. The bundle\'s inheritance references mitigate this for any resources Azure does expose to policy.');
+    deploymentNotes.push('You target AKS, Databricks, Synapse, or Azure ML — these create managed resource groups whose inner resources you cannot tag directly. The bundle\'s inheritance references will catch the resources Azure does expose to policy.');
   }
 
-  // Inheritance + size guidance (new in this version)
   const tagCount = allTags.length;
   if (tagCount > 0) {
     const totalRefs = tagCount * 5;
-    warnings.push(
-      `Initiative will contain ${totalRefs} policy references (${tagCount} enforcement + ${tagCount * 4} inheritance). Deploy at management-group scope for org-wide coverage, or subscription scope for narrower rollout.`
+    deploymentNotes.push(
+      `The initiative contains ${totalRefs} references (${tagCount} enforcement + ${tagCount * 4} inheritance). Deploy at management-group scope for org-wide coverage, or subscription scope for narrower rollout.`
     );
-    warnings.push(
-      'Tag inheritance is baked in via 4 built-in policies per tag: RG always (cd3aa116…), RG if-missing (ea3f2387…), Sub always (b27a0cbd…), Sub if-missing (40df99da…). The "always" variants OVERWRITE explicit resource-level tag values. Review and remove references that conflict with your governance model before deploying.'
+    deploymentNotes.push(
+      'Inheritance is baked in via 4 built-in policies per tag: RG always (cd3aa116…), RG if-missing (ea3f2387…), Sub always (b27a0cbd…), Sub if-missing (40df99da…). The "always" variants overwrite resource-level tag values; remove references that conflict with your governance model before deploying.'
     );
   }
 
-  // FOCUS export gap
-  warnings.push('Note: Even with high tag compliance, Azure FOCUS cost exports may show untagged billing lines for managed-RG and platform resources. Consider subscription-naming-convention-based transformations in Power BI for full cost attribution coverage.');
+  deploymentNotes.push('Azure FOCUS cost exports may still show untagged billing lines for managed-RG and platform resources even at full tag compliance. Layer on subscription-naming-convention transformations in Power BI for full cost attribution coverage.');
 
-  return warnings;
+  return { limitations, deploymentNotes };
 }

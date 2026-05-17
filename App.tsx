@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Policy, RequiredTag, OptionalTag, CloudProvider } from './types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Policy, RequiredTag, OptionalTag, CloudProvider, CategorizedExportWarnings } from './types';
 import { TEMPLATES } from './services/templates';
 import { validatePolicy } from './services/validator';
 import { convertAwsPolicyToMcp, convertMcpToAwsPolicy, getAwsExportWarnings } from './services/converter';
@@ -8,8 +8,19 @@ import { downloadJson, downloadMarkdown, downloadAwsPolicy, downloadAzurePolicy 
 import { Button } from './components/Button';
 import { Input, Checkbox } from './components/Input';
 import { TagForm } from './components/TagForm';
+import { ExportWarningsModal } from './components/ExportWarningsModal';
 import { useTheme } from './context/ThemeContext';
 import { Plus, Download, Upload, Copy, LayoutTemplate, ArrowRight, AlertTriangle, Check, Terminal, CheckCircle, Sun, Moon, ChevronDown, BookOpen } from 'lucide-react';
+
+type PreviewFormat = 'internal' | 'native';
+
+interface PendingExport {
+  provider: CloudProvider;
+  formatLabel: string;
+  filenameHint: string;
+  warnings: CategorizedExportWarnings;
+  download: () => void;
+}
 
 const INITIAL_POLICY: Policy = {
   version: "1.0",
@@ -59,9 +70,45 @@ const App: React.FC = () => {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [previewFormat, setPreviewFormat] = useState<PreviewFormat>('internal');
+  const [pendingExport, setPendingExport] = useState<PendingExport | null>(null);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
 
   const isDark = theme === 'dark';
+
+  // Provider has a native download path → toggle is meaningful
+  const supportsNativeDownload = policy.cloud_provider === 'aws' || policy.cloud_provider === 'azure';
+  const nativeFormatLabel = policy.cloud_provider === 'aws'
+    ? 'AWS Tag Policy'
+    : policy.cloud_provider === 'azure'
+      ? 'Azure ARM Bundle'
+      : 'GCP Label Policy';
+
+  // Reset preview to MCP shape when switching providers (avoids stale toggle state)
+  useEffect(() => {
+    setPreviewFormat('internal');
+  }, [policy.cloud_provider]);
+
+  // Memoize the JSON shown in the Live Preview pane. Converting the policy
+  // to the native ARM bundle for Azure is heavy (~600+ lines for 10 tags),
+  // so we only regenerate when the policy or selected format changes.
+  const previewJson = useMemo(() => {
+    if (previewFormat === 'internal') {
+      return JSON.stringify(policy, null, 2);
+    }
+    try {
+      if (policy.cloud_provider === 'aws') {
+        return JSON.stringify(convertMcpToAwsPolicy(policy), null, 2);
+      }
+      if (policy.cloud_provider === 'azure') {
+        return JSON.stringify(convertMcpToAzurePolicy(policy), null, 2);
+      }
+      return JSON.stringify(policy, null, 2);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'unknown error';
+      return `// Native preview unavailable: ${msg}\n\n${JSON.stringify(policy, null, 2)}`;
+    }
+  }, [policy, previewFormat]);
 
   // Wrapper for setView that also updates browser history
   const setView = (newView: ViewState, pushHistory = true) => {
@@ -289,33 +336,43 @@ const App: React.FC = () => {
   const handleDownloadAwsPolicy = () => {
     (window as any).trackEvent?.('policy_downloaded', { format: 'aws-policy' });
     const warnings = getAwsExportWarnings(policy);
-    if (warnings.length > 0) {
-      const proceed = window.confirm(
-        `Note: Some features will not be preserved in AWS format:\n\n${warnings.join('\n')}\n\nContinue with export?`
-      );
-      if (!proceed) return;
-    }
-    downloadAwsPolicy(policyForExport());
     setShowDownloadMenu(false);
+    if (warnings.limitations.length === 0 && warnings.deploymentNotes.length === 0) {
+      downloadAwsPolicy(policyForExport());
+      return;
+    }
+    setPendingExport({
+      provider: 'aws',
+      formatLabel: 'Tag Policy',
+      filenameHint: 'aws_tag_policy.json',
+      warnings,
+      download: () => downloadAwsPolicy(policyForExport()),
+    });
   };
 
   const handleDownloadAzurePolicy = () => {
     (window as any).trackEvent?.('policy_downloaded', { format: 'azure-policy' });
     const warnings = getAzureExportWarnings(policy);
-    if (warnings.length > 0) {
-      const proceed = window.confirm(
-        `Note: Some features will not be preserved in Azure Policy format:\n\n${warnings.join('\n')}\n\nContinue with export?`
-      );
-      if (!proceed) return;
-    }
-    downloadAzurePolicy(policyForExport());
     setShowDownloadMenu(false);
+    if (warnings.limitations.length === 0 && warnings.deploymentNotes.length === 0) {
+      downloadAzurePolicy(policyForExport());
+      return;
+    }
+    setPendingExport({
+      provider: 'azure',
+      formatLabel: 'Policy Initiative bundle',
+      filenameHint: 'azure_tagging_bundle.json',
+      warnings,
+      download: () => downloadAzurePolicy(policyForExport()),
+    });
   };
 
   const copyToClipboard = async () => {
     (window as any).trackEvent?.('policy_downloaded', { format: 'clipboard' });
     try {
-      await navigator.clipboard.writeText(JSON.stringify(policyForExport(), null, 2));
+      // Copy whatever the preview is currently showing — keeps Copy in sync
+      // with the Internal / native-format toggle in the toolbar.
+      await navigator.clipboard.writeText(previewJson);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -756,9 +813,35 @@ const App: React.FC = () => {
       <div className={`w-full md:w-1/2 lg:w-2/5 flex flex-col h-full relative ${isDark ? 'bg-[#1a1a1a] border-l border-white/10' : 'bg-white border-l border-gray-200'}`}>
 
         {/* Toolbar */}
-        <div className={`h-16 px-4 flex items-center justify-between shrink-0 ${isDark ? 'bg-[#1a1a1a] border-b border-white/10' : 'bg-white border-b border-gray-200'}`}>
-          <span className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2">Live Preview</span>
-          <div className="flex gap-2">
+        <div className={`h-16 px-4 flex items-center justify-between gap-3 shrink-0 ${isDark ? 'bg-[#1a1a1a] border-b border-white/10' : 'bg-white border-b border-gray-200'}`}>
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 shrink-0">Preview</span>
+            {supportsNativeDownload && (
+              <div
+                className={`inline-flex rounded-lg p-0.5 ${isDark ? 'bg-white/5 border border-white/10' : 'bg-gray-100 border border-gray-200'}`}
+                role="group"
+                aria-label="Preview format"
+              >
+                <button
+                  onClick={() => setPreviewFormat('internal')}
+                  className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${previewFormat === 'internal' ? (isDark ? 'bg-[#2a2a2a] text-white shadow-sm' : 'bg-white text-charcoal shadow-sm') : (isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-charcoal')}`}
+                  aria-pressed={previewFormat === 'internal'}
+                  title="Internal MCP policy shape — what you're editing"
+                >
+                  Internal
+                </button>
+                <button
+                  onClick={() => setPreviewFormat('native')}
+                  className={`px-2.5 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap ${previewFormat === 'native' ? (isDark ? 'bg-[#2a2a2a] text-white shadow-sm' : 'bg-white text-charcoal shadow-sm') : (isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-charcoal')}`}
+                  aria-pressed={previewFormat === 'native'}
+                  title={`${nativeFormatLabel} — exactly what gets downloaded`}
+                >
+                  {nativeFormatLabel}
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2 shrink-0">
             <Button size="sm" variant="secondary" onClick={copyToClipboard} className={isDark ? 'bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'}>
                {copied ? <Check size={14} className="mr-1 text-green-600"/> : <Copy size={14} className="mr-1"/>}
                {copied ? "Copied" : "Copy"}
@@ -810,7 +893,7 @@ const App: React.FC = () => {
         {/* JSON Preview */}
         <div className={`flex-1 overflow-auto p-4 relative group ${isDark ? 'bg-[#111111]' : 'bg-[#F4F4F4]'}`}>
            <pre className={`font-mono text-xs leading-relaxed p-2 ${isDark ? 'text-gray-300' : 'text-charcoal'}`}>
-             {JSON.stringify(policy, null, 2)}
+             {previewJson}
            </pre>
         </div>
 
@@ -836,6 +919,21 @@ const App: React.FC = () => {
         </div>
 
       </div>
+
+      {pendingExport && (
+        <ExportWarningsModal
+          isOpen={true}
+          provider={pendingExport.provider}
+          formatLabel={pendingExport.formatLabel}
+          filenameHint={pendingExport.filenameHint}
+          warnings={pendingExport.warnings}
+          onCancel={() => setPendingExport(null)}
+          onContinue={() => {
+            pendingExport.download();
+            setPendingExport(null);
+          }}
+        />
+      )}
     </div>
   );
 };
