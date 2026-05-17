@@ -1,97 +1,242 @@
 {
-  "policyDefinitions": [
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "generatedBy": "OptimNow Tagging Policy Generator",
+    "policyVersion": "1.0.0",
+    "deploymentScope": "subscription (or management group with management-group schema)",
+    "cliExample": "az deployment sub create --location <region> --template-file azure_tagging_bundle.json"
+  },
+  "resources": [
     {
-      "policyDefinitionId": "require-costcenter-tag",
-      "policyRule": {
-        "if": {
-          "allOf": [
-            {
-              "field": "type",
-              "equals": "Microsoft.Resources/subscriptions/resourceGroups"
-            },
-            {
-              "field": "[concat('tags[', parameters('tagName'), ']')]",
-              "exists": "false"
-            }
-          ]
+      "type": "Microsoft.Authorization/policyDefinitions",
+      "apiVersion": "2021-06-01",
+      "name": "require-tag-on-resources",
+      "properties": {
+        "displayName": "Require a tag on resources",
+        "policyType": "Custom",
+        "mode": "Indexed",
+        "description": "Requires that a tag with the specified name be present on resources. The effect parameter controls whether non-compliant resources are denied or audited.",
+        "metadata": {
+          "category": "Tags",
+          "version": "1.0.0",
+          "generatedBy": "OptimNow Tagging Policy Generator"
         },
-        "then": {
-          "effect": "deny"
+        "parameters": {
+          "tagName": {
+            "type": "String",
+            "metadata": {
+              "displayName": "Tag Name",
+              "description": "Name of the tag whose presence is required."
+            }
+          },
+          "effect": {
+            "type": "String",
+            "metadata": {
+              "displayName": "Effect",
+              "description": "Enforcement effect when the tag is missing."
+            },
+            "allowedValues": ["audit", "deny", "disabled"],
+            "defaultValue": "deny"
+          }
+        },
+        "policyRule": {
+          "if": {
+            "field": "[concat('tags[', parameters('tagName'), ']')]",
+            "exists": "false"
+          },
+          "then": {
+            "effect": "[parameters('effect')]"
+          }
         }
-      },
-      "parameters": {
-        "tagName": {
-          "type": "String",
-          "defaultValue": "CostCenter"
-        }
-      },
-      "metadata": {
-        "category": "Tags",
-        "description": "Identifies the cost center for chargeback and financial reporting"
       }
     },
     {
-      "policyDefinitionId": "require-environment-tag",
-      "policyRule": {
-        "if": {
-          "allOf": [
-            {
-              "field": "type",
-              "equals": "Microsoft.Resources/subscriptions/resourceGroups"
-            },
-            {
-              "anyOf": [
-                {
-                  "field": "[concat('tags[', parameters('tagName'), ']')]",
-                  "exists": "false"
-                },
-                {
-                  "field": "[concat('tags[', parameters('tagName'), ']')]",
-                  "notIn": "[parameters('allowedValues')]"
-                }
-              ]
+      "type": "Microsoft.Authorization/policyDefinitions",
+      "apiVersion": "2021-06-01",
+      "name": "require-tag-and-value-on-resources",
+      "properties": {
+        "displayName": "Require a tag and value on resources",
+        "policyType": "Custom",
+        "mode": "Indexed",
+        "description": "Requires that a tag with the specified name be present on resources and that its value belong to an allowed list. The effect parameter controls whether non-compliant resources are denied or audited.",
+        "metadata": {
+          "category": "Tags",
+          "version": "1.0.0",
+          "generatedBy": "OptimNow Tagging Policy Generator"
+        },
+        "parameters": {
+          "tagName": {
+            "type": "String",
+            "metadata": {
+              "displayName": "Tag Name",
+              "description": "Name of the tag to enforce."
             }
-          ]
+          },
+          "allowedValues": {
+            "type": "Array",
+            "metadata": {
+              "displayName": "Allowed Values",
+              "description": "List of allowed tag values."
+            }
+          },
+          "effect": {
+            "type": "String",
+            "metadata": {
+              "displayName": "Effect",
+              "description": "Enforcement effect when the tag is missing or its value is not in the allowed list."
+            },
+            "allowedValues": ["audit", "deny", "disabled"],
+            "defaultValue": "deny"
+          }
         },
-        "then": {
-          "effect": "deny"
+        "policyRule": {
+          "if": {
+            "anyOf": [
+              {
+                "field": "[concat('tags[', parameters('tagName'), ']')]",
+                "exists": "false"
+              },
+              {
+                "field": "[concat('tags[', parameters('tagName'), ']')]",
+                "notIn": "[parameters('allowedValues')]"
+              }
+            ]
+          },
+          "then": {
+            "effect": "[parameters('effect')]"
+          }
         }
-      },
-      "parameters": {
-        "tagName": {
-          "type": "String",
-          "defaultValue": "Environment"
-        },
-        "allowedValues": {
-          "type": "Array",
-          "defaultValue": ["Production", "Staging", "Development", "Sandbox"]
-        }
-      },
-      "metadata": {
-        "category": "Tags",
-        "description": "Identifies the deployment environment for the resource"
       }
     },
     {
-      "policyDefinitionId": "audit-owner-tag",
-      "policyRule": {
-        "if": {
-          "field": "[concat('tags[', parameters('tagName'), ']')]",
-          "exists": "false"
+      "type": "Microsoft.Authorization/policySetDefinitions",
+      "apiVersion": "2021-06-01",
+      "name": "tagging-governance-initiative",
+      "dependsOn": [
+        "[resourceId('Microsoft.Authorization/policyDefinitions', 'require-tag-on-resources')]",
+        "[resourceId('Microsoft.Authorization/policyDefinitions', 'require-tag-and-value-on-resources')]"
+      ],
+      "properties": {
+        "displayName": "Tagging Governance Initiative",
+        "policyType": "Custom",
+        "description": "Enforces required tags, audits optional tags, and inherits tags from resource group and subscription scopes. Generated by OptimNow Tagging Policy Generator.",
+        "metadata": {
+          "category": "Tags",
+          "version": "1.0.0",
+          "generatedBy": "OptimNow Tagging Policy Generator"
         },
-        "then": {
-          "effect": "audit"
-        }
-      },
-      "parameters": {
-        "tagName": {
-          "type": "String",
-          "defaultValue": "Owner"
-        }
-      },
-      "metadata": {
-        "category": "Tags",
-        "description": "Identifies the team or individual responsible for the resource"
+        "policyDefinitions": [
+          {
+            "policyDefinitionReferenceId": "require-CostCenter",
+            "policyDefinitionId": "[resourceId('Microsoft.Authorization/policyDefinitions', 'require-tag-on-resources')]",
+            "parameters": {
+              "tagName": { "value": "CostCenter" },
+              "effect": { "value": "deny" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "require-Environment-with-values",
+            "policyDefinitionId": "[resourceId('Microsoft.Authorization/policyDefinitions', 'require-tag-and-value-on-resources')]",
+            "parameters": {
+              "tagName": { "value": "Environment" },
+              "effect": { "value": "deny" },
+              "allowedValues": { "value": ["Production", "Staging", "Development", "Sandbox"] }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "audit-Owner",
+            "policyDefinitionId": "[resourceId('Microsoft.Authorization/policyDefinitions', 'require-tag-on-resources')]",
+            "parameters": {
+              "tagName": { "value": "Owner" },
+              "effect": { "value": "audit" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "CostCenter-inherit-from-rg",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/cd3aa116-8754-49c9-a813-ad46512ece54",
+            "parameters": {
+              "tagName": { "value": "CostCenter" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "CostCenter-inherit-from-rg-if-missing",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/ea3f2387-9b95-492a-a190-fcdc54f7b070",
+            "parameters": {
+              "tagName": { "value": "CostCenter" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "CostCenter-inherit-from-sub",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/b27a0cbd-a167-4064-ae47-28c309da4a4f",
+            "parameters": {
+              "tagName": { "value": "CostCenter" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "CostCenter-inherit-from-sub-if-missing",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/40df99da-1232-49b1-a39a-6571f4e27e24",
+            "parameters": {
+              "tagName": { "value": "CostCenter" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "Environment-inherit-from-rg",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/cd3aa116-8754-49c9-a813-ad46512ece54",
+            "parameters": {
+              "tagName": { "value": "Environment" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "Environment-inherit-from-rg-if-missing",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/ea3f2387-9b95-492a-a190-fcdc54f7b070",
+            "parameters": {
+              "tagName": { "value": "Environment" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "Environment-inherit-from-sub",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/b27a0cbd-a167-4064-ae47-28c309da4a4f",
+            "parameters": {
+              "tagName": { "value": "Environment" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "Environment-inherit-from-sub-if-missing",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/40df99da-1232-49b1-a39a-6571f4e27e24",
+            "parameters": {
+              "tagName": { "value": "Environment" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "Owner-inherit-from-rg",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/cd3aa116-8754-49c9-a813-ad46512ece54",
+            "parameters": {
+              "tagName": { "value": "Owner" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "Owner-inherit-from-rg-if-missing",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/ea3f2387-9b95-492a-a190-fcdc54f7b070",
+            "parameters": {
+              "tagName": { "value": "Owner" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "Owner-inherit-from-sub",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/b27a0cbd-a167-4064-ae47-28c309da4a4f",
+            "parameters": {
+              "tagName": { "value": "Owner" }
+            }
+          },
+          {
+            "policyDefinitionReferenceId": "Owner-inherit-from-sub-if-missing",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/40df99da-1232-49b1-a39a-6571f4e27e24",
+            "parameters": {
+              "tagName": { "value": "Owner" }
+            }
+          }
+        ]
       }
     }
   ]

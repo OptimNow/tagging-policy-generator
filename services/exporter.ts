@@ -141,7 +141,7 @@ export const downloadGcpPolicy = (policy: Policy, filename: string = 'gcp_label_
   downloadAnchorNode.remove();
 };
 
-export const downloadAzurePolicy = (policy: Policy, filename: string = 'azure_tag_policy.json') => {
+export const downloadAzurePolicy = (policy: Policy, filename: string = 'azure_tagging_bundle.json') => {
   const azurePolicy = convertMcpToAzurePolicy(policy);
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(azurePolicy, null, 2));
   const downloadAnchorNode = document.createElement('a');
