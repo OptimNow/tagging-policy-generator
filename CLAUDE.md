@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The FinOps Tagging Policy Generator is a client-side React/TypeScript web application that helps FinOps practitioners create tagging/labeling policies for cloud cost attribution across **AWS, GCP, and Azure**. The tool runs entirely in the browser with no backend, and generates JSON policy files compatible with the FinOps Tag Compliance MCP Server.
 
-**Live app:** http://tagpolgenerator.optimnow.io/
+**Live app:** https://tagpolgenerator.optimnow.io/
 
 ## Development Commands
 
@@ -19,7 +19,7 @@ npm run build        # Build for production (outputs to dist/)
 npm run preview      # Preview production build locally
 ```
 
-**No test suite is currently configured.** There is no linting or testing setup in package.json.
+**No test runner is wired into package.json.** There is no linting setup. A standalone smoke script, `test-providers.mjs`, sits at the repo root and is run manually with `node test-providers.mjs`. Manual UAT procedures live in `doc/uat/`.
 
 ## Architecture Overview
 
@@ -29,8 +29,10 @@ This is a single-page application with two main views managed by state:
 
 1. **Start View** (`view === 'start'`): Landing page with options:
    - Create from scratch with AWS/GCP/Azure provider toggle (with optional provider-specific templates)
-   - Import from AWS Organizations tag policy, GCP label policy, or Azure Policy Initiative
-   - Export to AWS Organizations format, GCP label policy format, or Azure Policy Initiative format
+   - Import from an AWS Organizations tag policy, or from an Azure ARM tagging bundle
+   - Export to AWS Organizations format, or to an Azure ARM tagging bundle
+
+   **GCP has no import/export card.** GCP is a first-class authoring provider (toggle, templates, naming rules, validation, native JSON preview), but `gcp-converter.ts` and `downloadGcpPolicy` are not wired into `App.tsx`. Only AWS and Azure have native round-trips in the UI.
 
 2. **Editor View** (`view === 'editor'`): Split-screen policy builder
    - Left panel: Form-based policy editor
@@ -47,10 +49,10 @@ App.tsx (state management, provider-aware routing)
   ↓
 ├─> TagForm.tsx (individual tag editor, provider-aware resource categories)
 ├─> validator.ts (real-time validation with provider-specific rules)
-├─> exporter.ts (JSON/Markdown/AWS/GCP/Azure downloads)
+├─> exporter.ts (JSON/Markdown/AWS/Azure downloads; GCP handler exists but is unused)
 ├─> converter.ts (AWS Organizations ↔ MCP format conversion)
-├─> gcp-converter.ts (GCP Label Policy ↔ MCP format conversion)
-└─> azure-converter.ts (Azure Policy Initiative ↔ MCP format conversion)
+├─> gcp-converter.ts (GCP Label Policy ↔ MCP; not wired into App.tsx)
+└─> azure-converter.ts (Azure ARM tagging bundle ↔ MCP format conversion)
 ```
 
 ### Key Type Definitions (types.ts)
@@ -95,28 +97,32 @@ App.tsx (state management, provider-aware routing)
 - **GCP → Internal**: Parses GCP label policy JSON, maps `enforced_for` to `applies_to`, `required` flag to required/optional tags; sets `cloud_provider: 'gcp'`
 - **Internal → GCP**: Converts to GCP format, auto-lowercases label keys, caps lengths at 63
 - **Important**: GCP Label Policies don't support regex validation. Export warns about regex loss, uppercase key conversion, and length limits.
-- `getGcpExportWarnings()`: Generates warnings about features that won't be preserved
+- `getGcpExportWarnings()`: returns a `CategorizedExportWarnings` object
+- **Not reachable from the UI**: this module is complete and tested, but `App.tsx` imports neither its converters nor its warnings. Wiring GCP back into the start view means adding import/export cards and a download entry.
 
 **services/azure-converter.ts**
-- Bidirectional conversion between internal format and Azure Policy Initiative format
-- **Azure → Internal**: Parses Azure Policy Initiative JSON (policyDefinitions array) or single definition; maps `effect: 'deny'` → required, `effect: 'audit'` → optional; sets `cloud_provider: 'azure'`
-- **Internal → Azure**: Generates one policy definition per tag (deny for required, audit for optional); includes `tagInheritanceRecommendations` (4 built-in policy IDs for tag inheritance from resource groups/subscriptions) and `managedResourceGroupNotes` (AKS, Databricks, Synapse, Azure ML, etc.)
-- **Important**: Azure Policy doesn't support regex validation. Export warns about regex loss, tag limits, storage name limits, managed RG issues, and FOCUS export gaps.
-- `getAzureExportWarnings()`: Generates warnings about features that won't be preserved
+- Bidirectional conversion between internal format and a **deployable ARM template bundle** (not a bare Policy Initiative)
+- **Internal → Azure**: `convertMcpToAzurePolicy()` returns an `AzureArmTemplate` (`$schema`, `contentVersion`, `metadata`, `resources[]`) using the subscription-scope schema `subscriptionDeploymentTemplate.json`. It emits two reusable custom definitions (`require-tag-on-resources`, `require-tag-and-value-on-resources`) plus one initiative (`tagging-governance-initiative`), with `effect: 'deny'` for required tags and `'audit'` for optional ones. `metadata.cliExample` carries the deploy command: `az deployment sub create --location <region> --template-file azure_tagging_bundle.json`
+- **Azure → Internal**: `convertAzurePolicyToMcp()` accepts either an ARM deployment template (with `resources[]`) or a standalone `Microsoft.Authorization/policySetDefinitions` object produced by this tool. Maps `effect: 'audit'` → optional, anything else → required; sets `cloud_provider: 'azure'`. Other shapes are rejected with an explicit error
+- `generateAzurePortalJson()`: builds a single-tag policy rule for copy/paste into the Azure portal. Used by **TagForm.tsx**, not by the export path
+- **Important**: Azure Policy doesn't support regex validation. Export warns about regex loss, tag limits, deployment scope, managed resource groups (AKS, Databricks, Synapse, Azure ML), and residual FOCUS cost-export gaps
+- `getAzureExportWarnings()`: returns a `CategorizedExportWarnings` object, not a flat list
 
 **services/exporter.ts**
-- Five export formats: JSON (native, filename is provider-aware), Markdown (includes Cloud Provider line), AWS Policy, GCP Label Policy, Azure Policy Initiative
+- Exposes five handlers: `downloadJson` (native, filename is provider-aware), `downloadMarkdown` (includes Cloud Provider line), `downloadAwsPolicy` (`aws_tag_policy.json`), `downloadGcpPolicy` (`gcp_label_policy.json`), `downloadAzurePolicy` (`azure_tagging_bundle.json`)
+- **Only four are called**: `App.tsx` does not import `downloadGcpPolicy`
 - Uses browser download API (createElement('a'), setAttribute, click, remove)
 
 ### Component Architecture
 
 **App.tsx**
 - Central state container for the entire `Policy` object
-- Manages view switching, template application, import/export (AWS, GCP, and Azure), and history navigation
+- Manages view switching, template application, import/export (AWS and Azure only), and history navigation
 - `selectedProvider` state controls 3-way provider toggle on start view; `policy.cloud_provider` drives editor behavior
 - Provider badge (blue=AWS, orange=GCP, purple=Azure) shown in editor header
 - Template dropdown and download menu filter by `policy.cloud_provider`
-- Start view: 3x2 grid for Import/Export cards (AWS, GCP, Azure)
+- Start view: two-column grid (`md:grid-cols-2`) holding four cards, AWS import/export and Azure import/export
+- Holds `CategorizedExportWarnings` state and renders `ExportWarningsModal` before every native download
 - `last_updated` timestamp is stamped at export-time only (not during editing) to avoid render-loop issues
 - useEffect hooks for: history management (respects `#editor` deep-links), click-outside detection, validation on changes
 
@@ -132,6 +138,11 @@ App.tsx (state management, provider-aware routing)
   - Placeholder text adapts: `e.g. CostCenter` (AWS/Azure) vs `e.g. cost_center` (GCP)
 - State: `isExpanded`, `testRegexInput`, `regexTestResult`, `expandedCategories`
 - `expandedCategories` resets when `cloudProvider` changes
+
+**components/ExportWarningsModal.tsx**
+- Confirmation dialog shown before a native (AWS/Azure) download completes
+- Takes a `CategorizedExportWarnings` and renders its two groups separately: `limitations` (features lost in the target format) and `deploymentNotes` (operational and scope guidance, not feature loss)
+- The user can cancel or proceed; proceeding triggers the stored `download` callback
 
 **components/Input.tsx** & **components/Button.tsx**
 - Shared styled components with theme support
@@ -171,16 +182,21 @@ The tool bridges the internal MCP format with native policy formats for AWS, GCP
 - Auto-lowercases keys on export: uppercase chars become underscores
 - Resource types use full GCP URIs (e.g., `compute.googleapis.com/Instance`)
 
-### Azure Policy Initiative Format (azure-converter.ts)
+### Azure ARM Tagging Bundle (azure-converter.ts)
 
-- Generates Azure Policy Initiative JSON with one policy definition per tag
-- Each definition includes `policyRule` with `if/then` blocks and `effect` (deny for required, audit for optional)
-- Parameters: `tagName` (string) and optionally `allowedValues` (array)
-- Export includes informational sections:
-  - `tagInheritanceRecommendations`: 4 built-in Azure Policy IDs for inheriting tags from resource groups and subscriptions
-  - `managedResourceGroupNotes`: Lists services that create managed resource groups (AKS, Databricks, Synapse, Azure ML, Managed Applications, App Service Environment)
+The export target is a **deployable ARM template**, not a raw policy document. Downloading it and running the CLI line in `metadata.cliExample` is meant to work with no hand-editing.
+
+- Schema: `subscriptionDeploymentTemplate.json` (subscription scope). The same template also deploys at management-group scope via `az deployment mg create`
+- `resources[]` contains, in order:
+  1. `Microsoft.Authorization/policyDefinitions` named `require-tag-on-resources`, parameters `tagName` (String) and `effect` (String, allowed `audit`/`deny`/`disabled`, default `deny`)
+  2. `Microsoft.Authorization/policyDefinitions` named `require-tag-and-value-on-resources`, same parameters plus `allowedValues` (Array)
+  3. `Microsoft.Authorization/policySetDefinitions` named `tagging-governance-initiative`, referencing the two definitions once per tag
+- Required tags are bound to `effect: 'deny'`, optional tags to `'audit'`. Reference IDs are sanitised to ARM-safe characters (letters, digits, hyphens, underscores)
+- Default download filename: `azure_tagging_bundle.json`
 - Limitations: No regex support, tag names max 512 chars, values max 256 chars, max 50 tags per resource
 - Resource types use `Microsoft.*` namespace format (e.g., `Microsoft.Compute/virtualMachines`)
+
+Note: an earlier version emitted `tagInheritanceRecommendations` and `managedResourceGroupNotes` alongside the definitions. Both were removed in the ARM refactor, because a deployable template cannot carry arbitrary advisory keys. That guidance now reaches the user through `getAzureExportWarnings()` and the export modal instead.
 
 ## Styling & UI
 
@@ -250,34 +266,42 @@ The application is 100% client-side:
 2. For AWS format: Modify converter.ts (be mindful of AWS policy syntax constraints)
 3. For GCP format: Modify gcp-converter.ts (be mindful of GCP label restrictions: lowercase, 63-char limits)
 4. For Azure format: Modify azure-converter.ts (be mindful of Azure tag restrictions: forbidden chars, reserved prefixes, 512/256 char limits)
-5. Add warnings via `getAwsExportWarnings()`, `getGcpExportWarnings()`, or `getAzureExportWarnings()` if features won't be preserved
+5. Add warnings via `getAwsExportWarnings()`, `getGcpExportWarnings()`, or `getAzureExportWarnings()`. All three return `CategorizedExportWarnings`: put feature loss in `limitations`, and scope or deployment guidance in `deploymentNotes`. `ExportWarningsModal` renders the two groups separately, so the split matters
 
 ## File Organization
 
 ```
 /
-├── index.html              # Entry point with Tailwind config and SEO meta tags
-├── index.tsx               # React root, ThemeContext provider
-├── App.tsx                 # Main application logic (provider-aware)
-├── types.ts                # Core types, CloudProvider, AWS + GCP + Azure resource categories
-├── vite.config.ts          # Build configuration
-├── tsconfig.json           # TypeScript configuration
+├── index.html                    # Entry point with Tailwind config and SEO meta tags
+├── index.tsx                     # React root, ThemeContext provider
+├── App.tsx                       # Main application logic (provider-aware)
+├── types.ts                      # Core types, CloudProvider, CategorizedExportWarnings,
+│                                 #   AWS + GCP + Azure resource categories
+├── vite.config.ts                # Build configuration
+├── tsconfig.json                 # TypeScript configuration
+├── test-providers.mjs            # Manual smoke test for GCP/Azure logic (node test-providers.mjs)
+├── metadata.json                 # App metadata
+├── README.md                     # Public-facing overview
+├── USER_MANUAL.md                # End-user documentation (linked from the app)
 ├── components/
-│   ├── Button.tsx          # Styled button with variants
-│   ├── Input.tsx           # Form inputs (Input, TextArea, Checkbox)
-│   └── TagForm.tsx         # Individual tag editor (provider-aware, complex)
+│   ├── Button.tsx                # Styled button with variants
+│   ├── Input.tsx                 # Form inputs (Input, TextArea, Checkbox)
+│   ├── ExportWarningsModal.tsx   # Pre-download warnings dialog (limitations + deploymentNotes)
+│   └── TagForm.tsx               # Individual tag editor (provider-aware, complex)
 ├── services/
-│   ├── templates.ts        # Pre-built policy templates (4 AWS + 4 GCP + 4 Azure)
-│   ├── validator.ts        # Real-time policy validation (provider-specific rules)
-│   ├── converter.ts        # AWS Organizations ↔ MCP format conversion
-│   ├── gcp-converter.ts    # GCP Label Policy ↔ MCP format conversion
-│   ├── azure-converter.ts  # Azure Policy Initiative ↔ MCP format conversion
-│   └── exporter.ts         # Download handlers (JSON/MD/AWS/GCP/Azure)
+│   ├── templates.ts              # Pre-built policy templates (4 AWS + 4 GCP + 4 Azure)
+│   ├── validator.ts              # Real-time policy validation (provider-specific rules)
+│   ├── converter.ts              # AWS Organizations ↔ MCP format conversion
+│   ├── gcp-converter.ts          # GCP Label Policy ↔ MCP (not wired into App.tsx)
+│   ├── azure-converter.ts        # Azure ARM tagging bundle ↔ MCP format conversion
+│   └── exporter.ts               # Download handlers (JSON/MD/AWS/GCP/Azure)
 ├── context/
-│   └── ThemeContext.tsx    # Dark/light theme management
-├── examples/               # Sample policy files (AWS, GCP, and Azure)
-├── doc/                    # Documentation and UAT guides
-└── dist/                   # Build output (gitignored)
+│   └── ThemeContext.tsx          # Dark/light theme management
+├── public/                       # Images, robots.txt, sitemap.xml, llms.txt
+├── examples/                     # Sample policy files (AWS, GCP, and Azure)
+├── doc/                          # AWS tagging reference, security audit, UAT guides (doc/uat/)
+├── .kiro/specs/                  # UAT protocol specs (requirements, design, tasks)
+└── dist/                         # Build output (gitignored)
 ```
 
 ## Important Constraints
