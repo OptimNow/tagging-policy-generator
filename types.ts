@@ -386,3 +386,10 @@ export function getResourceTypes(provider: CloudProvider): string[] {
     default: return AWS_RESOURCE_TYPES;
   }
 }
+
+// Default naming-rule limits per provider, used when a loaded policy omits them.
+export const DEFAULT_NAMING_RULES: Record<CloudProvider, TagNamingRules> = {
+  aws: { case_sensitivity: false, allow_special_characters: false, max_key_length: 128, max_value_length: 256 },
+  gcp: { case_sensitivity: false, allow_special_characters: false, max_key_length: 63, max_value_length: 63 },
+  azure: { case_sensitivity: false, allow_special_characters: false, max_key_length: 512, max_value_length: 256 },
+};
