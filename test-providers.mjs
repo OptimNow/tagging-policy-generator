@@ -18,6 +18,9 @@ import { convertGcpPolicyToMcp, convertMcpToGcpPolicy, getGcpExportWarnings } fr
 import { convertAzurePolicyToMcp, convertMcpToAzurePolicy, getAzureExportWarnings } from './services/azure-converter';
 import { validatePolicy } from './services/validator';
 import { TEMPLATES } from './services/templates';
+import { convertAwsPolicyToMcp, convertMcpToAwsPolicy, getAwsExportWarnings } from './services/converter';
+import { tryParseNativePolicy } from './services/native-import';
+import { readFileSync } from 'fs';
 
 let passed = 0;
 let failed = 0;
@@ -217,6 +220,8 @@ try {
 
   assert(imported.tag_naming_rules.max_key_length === 512, 'Azure import: max_key_length = 512');
   assert(imported.tag_naming_rules.max_value_length === 256, 'Azure import: max_value_length = 256');
+  const exampleErrors = validatePolicy(imported);
+  assert(exampleErrors.length === 0, 'Azure import: example passes validation (got ' + exampleErrors.join('; ') + ')');
 } catch (e) {
   failed++;
   console.log('  FAIL: Azure import from example threw: ' + e.message);
@@ -263,8 +268,8 @@ try {
   assert(Array.isArray(initiative.dependsOn) && initiative.dependsOn.length === 2, 'Azure export: initiative dependsOn lists both custom defs');
 
   const refs = initiative.properties.policyDefinitions;
-  // 1 required (CostCenter) + 1 optional (Team) = 2 enforcement + 2*4 = 8 inheritance = 10 refs
-  assert(refs.length === 10, 'Azure export: 10 initiative references (2 enforcement + 8 inheritance, got ' + refs.length + ')');
+  // 1 required (CostCenter) + 1 optional (Team) = 2 enforcement + 2 inheritance (RG if missing) = 4 refs
+  assert(refs.length === 4, 'Azure export: 4 initiative references (2 enforcement + 2 inheritance, got ' + refs.length + ')');
 
   // Required tag becomes deny effect
   const costCenterRef = refs.find(r => r.policyDefinitionReferenceId === 'require-CostCenter-with-values');
@@ -280,14 +285,20 @@ try {
   assert(teamRef?.parameters?.effect?.value === 'audit', 'Azure export: optional tag uses audit effect');
   assert(teamRef?.policyDefinitionId?.includes('require-tag-on-resources'), 'Azure export: Team ref points to plain require-tag custom def (no allowed_values)');
 
-  // Inheritance: 4 built-in GUIDs referenced per tag
-  const inheritanceGuids = ['cd3aa116', 'ea3f2387', 'b27a0cbd', '40df99da'];
+  // Inheritance: only "Inherit a tag from the resource group if missing" (ea3f2387), one per tag
   for (const tagName of ['CostCenter', 'Team']) {
-    for (const guid of inheritanceGuids) {
-      const inheritRef = refs.find(r => r.policyDefinitionId.includes(guid) && r.parameters?.tagName?.value === tagName);
-      assert(inheritRef !== undefined, 'Azure export: inheritance ref for ' + tagName + ' + GUID ' + guid + ' present');
-    }
+    const inheritRefs = refs.filter(r => !r.policyDefinitionId.startsWith('[') && r.parameters?.tagName?.value === tagName);
+    assert(inheritRefs.length === 1 && inheritRefs[0].policyDefinitionId.endsWith('/ea3f2387-9b95-492a-a190-fcdc54f7b070'), 'Azure export: ' + tagName + ' has exactly one inheritance ref, RG if missing');
   }
+  assert(!refs.some(r => /cd3aa116|b27a0cbd|40df99da/.test(r.policyDefinitionId)), 'Azure export: no overwrite or subscription inheritance refs');
+
+  // Scope: the required tag carries its applies_to, the optional tag applies to all types
+  assert(JSON.stringify(costCenterRef?.parameters?.resourceTypes?.value) === JSON.stringify(['Microsoft.Compute/virtualMachines']), 'Azure export: CostCenter resourceTypes = its applies_to');
+  assert(Array.isArray(teamRef?.parameters?.resourceTypes?.value) && teamRef.parameters.resourceTypes.value.length === 0, 'Azure export: optional Team resourceTypes is empty (all types)');
+
+  // ARM escaping: policy-rule expressions must reach Azure Policy unevaluated
+  const ruleJson = JSON.stringify(customDefs.map(d => d.properties.policyRule));
+  assert(ruleJson.includes("[[concat('tags['") && ruleJson.includes("[[parameters('effect')]") && !ruleJson.includes('"[concat('), 'Azure export: policy-rule expressions are escaped with [[ for ARM');
 } catch (e) {
   failed++;
   console.log('  FAIL: Azure export threw: ' + e.message);
@@ -306,10 +317,88 @@ try {
   assert(reimported.required_tags.some(t => t.name === 'CostCenter'), 'Azure round-trip preserves CostCenter tag');
   const costCenter = reimported.required_tags.find(t => t.name === 'CostCenter');
   assert(costCenter?.allowed_values?.includes('Engineering'), 'Azure round-trip preserves allowed_values');
+  assert(JSON.stringify(costCenter?.applies_to) === JSON.stringify(['Microsoft.Compute/virtualMachines']), 'Azure round-trip preserves applies_to');
+  const reimportErrors = validatePolicy(reimported);
+  assert(reimportErrors.length === 0, 'Azure round-trip result passes validation (got ' + reimportErrors.join('; ') + ')');
 } catch (e) {
   failed++;
   console.log('  FAIL: Azure round-trip threw: ' + e.message);
 }
+
+// Legacy bundle (exported before resourceTypes existed): old inheritance refs skipped, applies_to = every Azure type
+try {
+  const legacy = { resources: [{ type: 'Microsoft.Authorization/policySetDefinitions', properties: { policyDefinitions: [
+    { policyDefinitionReferenceId: 'require-CostCenter', policyDefinitionId: 'x', parameters: { tagName: { value: 'CostCenter' }, effect: { value: 'deny' } } },
+    { policyDefinitionReferenceId: 'CostCenter-inherit-from-sub', policyDefinitionId: '/providers/Microsoft.Authorization/policyDefinitions/b27a0cbd-a167-4064-ae47-28c309da4a4f', parameters: { tagName: { value: 'CostCenter' } } }
+  ] } }] };
+  const legacyImported = convertAzurePolicyToMcp(JSON.stringify(legacy));
+  assert(legacyImported.required_tags.length === 1 && legacyImported.optional_tags.length === 0, 'Azure legacy import: old inheritance GUIDs are skipped, not imported as tags');
+  assert(legacyImported.required_tags[0].applies_to.length === azureTypes.length, 'Azure legacy import: applies_to defaults to every Azure resource type');
+  assert(validatePolicy(legacyImported).length === 0, 'Azure legacy import passes validation');
+} catch (e) {
+  failed++;
+  console.log('  FAIL: Azure legacy import threw: ' + e.message);
+}
+
+// ===== 4b. AWS Converter =====
+console.log('\\n--- 4b. AWS Converter ---');
+
+const awsBase = { version: '1.0', last_updated: new Date().toISOString(), cloud_provider: 'aws', optional_tags: [], tag_naming_rules: { case_sensitivity: false, allow_special_characters: false, max_key_length: 128, max_value_length: 256 } };
+
+const awsVpc = convertMcpToAwsPolicy({ ...awsBase, required_tags: [{ name: 'CostCenter', description: 'd', allowed_values: null, validation_regex: null, applies_to: ['ec2:vpc'] }] });
+assert(JSON.stringify(awsVpc.tags.CostCenter.enforced_for?.['@@assign']) === JSON.stringify(['ec2:vpc']), 'AWS export: ec2:vpc is enforced on its own, not as ec2:ALL_SUPPORTED');
+
+const awsRdsPolicy = { ...awsBase, required_tags: [{ name: 'Owner', description: 'd', allowed_values: null, validation_regex: null, applies_to: ['rds:db', 'ec2:instance'] }] };
+const awsRds = convertMcpToAwsPolicy(awsRdsPolicy);
+const awsRdsEnforced = awsRds.tags.Owner.enforced_for?.['@@assign'] || [];
+assert(awsRdsEnforced.includes('rds:ALL_SUPPORTED') && awsRdsEnforced.includes('ec2:instance') && !awsRdsEnforced.includes('ec2:ALL_SUPPORTED'), 'AWS export: rds:db uses rds:ALL_SUPPORTED, ec2:instance stays specific');
+assert(getAwsExportWarnings(awsRdsPolicy).limitations.some(w => w.includes('rds:ALL_SUPPORTED')), 'AWS export warns about the RDS widening');
+
+const awsMixPolicy = { ...awsBase, required_tags: [{ name: 'Team', description: 'd', allowed_values: null, validation_regex: null, applies_to: ['elasticloadbalancing:loadbalancer', 'fsx:file-system', 'sagemaker:endpoint'] }] };
+const awsMix = convertMcpToAwsPolicy(awsMixPolicy);
+assert(JSON.stringify(awsMix.tags.Team.enforced_for?.['@@assign']) === JSON.stringify(['elasticloadbalancing:loadbalancer', 'fsx:file-system']), 'AWS export: ELB and FSx are enforced');
+assert(getAwsExportWarnings(awsMixPolicy).limitations.some(w => w.includes('sagemaker:endpoint')), 'AWS export warns that sagemaker:endpoint is reported, not enforced');
+
+const onlyReportPolicy = { ...awsBase, required_tags: [{ name: 'Project', description: 'd', allowed_values: null, validation_regex: null, applies_to: ['sagemaker:endpoint', 'glue:job'] }] };
+const onlyReportBack = convertAwsPolicyToMcp(JSON.stringify(convertMcpToAwsPolicy(onlyReportPolicy)));
+assert(onlyReportBack.required_tags.length === 1 && JSON.stringify(onlyReportBack.required_tags[0].applies_to) === JSON.stringify(['sagemaker:endpoint', 'glue:job']), 'AWS round-trip: report-only tag stays required with its applies_to');
+
+for (const tmpl of TEMPLATES.filter(t => t.provider === 'aws')) {
+  const p = { ...awsBase, required_tags: tmpl.policy.required_tags || [], optional_tags: tmpl.policy.optional_tags || [] };
+  const back = convertAwsPolicyToMcp(JSON.stringify(convertMcpToAwsPolicy(p)));
+  const sameScope = p.required_tags.every(t => {
+    const b = back.required_tags.find(x => x.name === t.name);
+    return b && JSON.stringify([...b.applies_to].sort()) === JSON.stringify([...t.applies_to].sort());
+  });
+  assert(sameScope && back.optional_tags.length === p.optional_tags.length && validatePolicy(back).length === 0, 'AWS round-trip: "' + tmpl.name + '" template keeps every tag and scope and stays valid');
+}
+
+for (const file of ['aws-policy-example.json', 'aws-import-test.json']) {
+  try {
+    const awsImported = convertAwsPolicyToMcp(readFileSync('./examples/' + file, 'utf8'));
+    const errs = validatePolicy(awsImported);
+    assert(errs.length === 0, 'AWS import: ' + file + ' passes validation (got ' + errs.join('; ') + ')');
+  } catch (e) {
+    failed++;
+    console.log('  FAIL: AWS import of ' + file + ' threw: ' + e.message);
+  }
+}
+
+let awsRejected = false;
+try { convertAwsPolicyToMcp(JSON.stringify({ hello: 'world' })); } catch (e) { awsRejected = true; }
+assert(awsRejected, 'AWS import rejects JSON without a tags object instead of returning an empty policy');
+
+// ===== 4c. Native JSON reload =====
+console.log('\\n--- 4c. Native JSON reload ---');
+for (const file of ['startup-policy.json', 'enterprise-policy.json']) {
+  const native = tryParseNativePolicy(readFileSync('./examples/' + file, 'utf8'));
+  assert(native !== null && native.cloud_provider === 'aws' && native.required_tags.length > 0, 'Native import recognises ' + file);
+  const errs = native ? validatePolicy(native) : ['not parsed'];
+  assert(errs.length === 0, 'Native import: ' + file + ' passes validation (got ' + errs.join('; ') + ')');
+}
+assert(tryParseNativePolicy(readFileSync('./examples/aws-policy-example.json', 'utf8')) === null, 'Native import ignores an AWS tag policy');
+const nativeGcp = tryParseNativePolicy(JSON.stringify({ cloud_provider: 'gcp', required_tags: [{ name: 'team', description: 'd', applies_to: ['compute.googleapis.com/Instance'] }] }));
+assert(nativeGcp !== null && nativeGcp.cloud_provider === 'gcp' && nativeGcp.tag_naming_rules.max_key_length === 63, 'Native import keeps the provider and fills its default naming rules');
 
 // ===== 5. Validator =====
 console.log('\\n--- 5. Validator ---');

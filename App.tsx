@@ -5,6 +5,7 @@ import { validatePolicy } from './services/validator';
 import { convertAwsPolicyToMcp, convertMcpToAwsPolicy, getAwsExportWarnings } from './services/converter';
 import { convertAzurePolicyToMcp, convertMcpToAzurePolicy, getAzureExportWarnings } from './services/azure-converter';
 import { downloadJson, downloadMarkdown, downloadAwsPolicy, downloadAzurePolicy } from './services/exporter';
+import { tryParseNativePolicy } from './services/native-import';
 import { Button } from './components/Button';
 import { Input, Checkbox } from './components/Input';
 import { TagForm } from './components/TagForm';
@@ -50,6 +51,11 @@ const AZURE_NAMING_RULES = {
   max_value_length: 256
 };
 
+// Serialises a policy without its timestamp, to tell whether it has changed.
+const policySnapshot = (p: Policy) => JSON.stringify({ ...p, last_updated: '' });
+
+const PROVIDER_NAMES: Record<CloudProvider, string> = { aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
+
 type ViewState = 'start' | 'editor';
 
 const App: React.FC = () => {
@@ -72,9 +78,26 @@ const App: React.FC = () => {
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [previewFormat, setPreviewFormat] = useState<PreviewFormat>('internal');
   const [pendingExport, setPendingExport] = useState<PendingExport | null>(null);
+  // The policy as last loaded or downloaded. Anything different is unsaved work.
+  const [savedSnapshot, setSavedSnapshot] = useState<string>(() => policySnapshot(INITIAL_POLICY));
   const downloadMenuRef = useRef<HTMLDivElement>(null);
 
   const isDark = theme === 'dark';
+
+  const hasUnsavedChanges = useMemo(() => policySnapshot(policy) !== savedSnapshot, [policy, savedSnapshot]);
+  const totalTags = policy.required_tags.length + policy.optional_tags.length;
+
+  // Puts a new policy in the editor and records it as the saved state.
+  const loadPolicy = (next: Policy) => {
+    setPolicy(next);
+    setSavedSnapshot(policySnapshot(next));
+  };
+
+  // Asks before replacing a policy that has changes the user never downloaded.
+  const confirmDiscard = () =>
+    !hasUnsavedChanges || window.confirm('Replace the policy you are editing? Changes you have not downloaded will be lost.');
+
+  const markSaved = () => setSavedSnapshot(policySnapshot(policy));
 
   // Provider has a native download path → toggle is meaningful
   const supportsNativeDownload = policy.cloud_provider === 'aws' || policy.cloud_provider === 'azure';
@@ -150,6 +173,17 @@ const App: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Warn before a refresh or tab close throws away changes that were never downloaded.
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
   // Update validation whenever policy changes
   useEffect(() => {
     if (view === 'editor') {
@@ -162,7 +196,8 @@ const App: React.FC = () => {
     const targetProvider = provider || selectedProvider;
     const template = TEMPLATES.find(t => t.name === templateName && t.provider === targetProvider);
     if (template) {
-      setPolicy({
+      if (!confirmDiscard()) return;
+      loadPolicy({
         version: INITIAL_POLICY.version,
         last_updated: new Date().toISOString(),
         cloud_provider: template.provider,
@@ -174,15 +209,19 @@ const App: React.FC = () => {
             ? { ...AZURE_NAMING_RULES }
             : { ...INITIAL_POLICY.tag_naming_rules }
       });
-      setView('editor');
+      // Only add a history entry when arriving from the start page, so Back
+      // still leaves the editor after loading templates inside it.
+      setView('editor', view !== 'editor');
     }
   };
 
   // Handle AWS Import
   const handleImport = () => {
     try {
-      const converted = convertAwsPolicyToMcp(awsImportText);
-      setPolicy(converted);
+      // A policy JSON saved from this tool loads as-is, whatever its provider.
+      const converted = tryParseNativePolicy(awsImportText) ?? convertAwsPolicyToMcp(awsImportText);
+      if (!confirmDiscard()) return;
+      loadPolicy(converted);
       setImportError(null);
       setView('editor');
     } catch (e) {
@@ -223,8 +262,10 @@ const App: React.FC = () => {
   // Handle Azure Import
   const handleAzureImport = () => {
     try {
-      const converted = convertAzurePolicyToMcp(azureImportText);
-      setPolicy(converted);
+      // A policy JSON saved from this tool loads as-is, whatever its provider.
+      const converted = tryParseNativePolicy(azureImportText) ?? convertAzurePolicyToMcp(azureImportText);
+      if (!confirmDiscard()) return;
+      loadPolicy(converted);
       setAzureImportError(null);
       setView('editor');
     } catch (e) {
@@ -324,12 +365,14 @@ const App: React.FC = () => {
   const handleDownloadJson = () => {
     (window as any).trackEvent?.('policy_downloaded', { format: 'json' });
     downloadJson(policyForExport());
+    markSaved();
     setShowDownloadMenu(false);
   };
 
   const handleDownloadMarkdown = () => {
     (window as any).trackEvent?.('policy_downloaded', { format: 'markdown' });
     downloadMarkdown(policyForExport());
+    markSaved();
     setShowDownloadMenu(false);
   };
 
@@ -339,6 +382,7 @@ const App: React.FC = () => {
     setShowDownloadMenu(false);
     if (warnings.limitations.length === 0 && warnings.deploymentNotes.length === 0) {
       downloadAwsPolicy(policyForExport());
+      markSaved();
       return;
     }
     setPendingExport({
@@ -346,7 +390,7 @@ const App: React.FC = () => {
       formatLabel: 'Tag Policy',
       filenameHint: 'aws_tag_policy.json',
       warnings,
-      download: () => downloadAwsPolicy(policyForExport()),
+      download: () => { downloadAwsPolicy(policyForExport()); markSaved(); },
     });
   };
 
@@ -356,6 +400,7 @@ const App: React.FC = () => {
     setShowDownloadMenu(false);
     if (warnings.limitations.length === 0 && warnings.deploymentNotes.length === 0) {
       downloadAzurePolicy(policyForExport());
+      markSaved();
       return;
     }
     setPendingExport({
@@ -363,7 +408,7 @@ const App: React.FC = () => {
       formatLabel: 'Policy Initiative bundle',
       filenameHint: 'azure_tagging_bundle.json',
       warnings,
-      download: () => downloadAzurePolicy(policyForExport()),
+      download: () => { downloadAzurePolicy(policyForExport()); markSaved(); },
     });
   };
 
@@ -428,6 +473,17 @@ const App: React.FC = () => {
                 Pure client-side, secure, and ready for MCP.
               </p>
             </div>
+
+          {totalTags > 0 && (
+            <div className={`rounded-2xl px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${isDark ? 'bg-chartreuse/10 border border-chartreuse/30' : 'bg-lime-50 border border-lime-300'}`}>
+              <p className={`text-sm ${isDark ? 'text-gray-200' : 'text-charcoal'}`}>
+                Your {PROVIDER_NAMES[policy.cloud_provider]} policy with {totalTags} {totalTags === 1 ? 'tag' : 'tags'} is still open{hasUnsavedChanges ? ', with changes you have not downloaded' : ''}.
+              </p>
+              <Button size="sm" onClick={() => setView('editor')} className="shrink-0">
+                Resume editing <ArrowRight size={14} className="ml-1" />
+              </Button>
+            </div>
+          )}
 
           {/* Option 1: Create New - Full Width */}
           <div className={`rounded-2xl p-8 hover:border-chartreuse/50 transition-all ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
@@ -495,7 +551,8 @@ const App: React.FC = () => {
                           ? { ...AZURE_NAMING_RULES }
                           : { ...INITIAL_POLICY.tag_naming_rules }
                     };
-                    setPolicy(newPolicy);
+                    if (!confirmDiscard()) return;
+                    loadPolicy(newPolicy);
                     setView('editor');
                   }} className="justify-between group">
                     Start Blank ({selectedProvider.toUpperCase()}) <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform"/>
@@ -535,7 +592,7 @@ const App: React.FC = () => {
                 <div className="flex-1">
                   <h2 className="text-xl font-bold">Import AWS Policy</h2>
                   <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Paste an AWS Organizations tag policy to convert it to our format.
+                    Paste an AWS Organizations tag policy, or a policy JSON saved from this tool.
                   </p>
                 </div>
               </div>
@@ -598,13 +655,13 @@ const App: React.FC = () => {
                 <div className="flex-1">
                   <h2 className="text-xl font-bold">Import Azure Policy</h2>
                   <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Paste an Azure Policy Initiative JSON to convert it to our format.
+                    Paste an Azure tagging bundle exported from this tool, or a policy JSON saved from this tool.
                   </p>
                 </div>
               </div>
               <textarea
                 className={`w-full flex-1 min-h-[120px] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-chartreuse mb-4 resize-none ${isDark ? 'bg-black/30 border border-white/10 text-gray-300' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}
-                placeholder='{"policyDefinitions": [{ ... }]}'
+                placeholder='{"$schema": "...", "resources": [{ ... }]}'
                 value={azureImportText}
                 onChange={(e) => setAzureImportText(e.target.value)}
               />
@@ -663,10 +720,10 @@ const App: React.FC = () => {
   // --- Editor View ---
 
   return (
-    <div className={`flex h-screen flex-col md:flex-row overflow-hidden ${isDark ? 'bg-charcoal' : 'bg-light-grey'}`}>
+    <div className={`flex min-h-screen md:h-screen flex-col md:flex-row md:overflow-hidden ${isDark ? 'bg-charcoal' : 'bg-light-grey'}`}>
 
       {/* LEFT PANEL: FORM BUILDER */}
-      <div className={`w-full md:w-1/2 lg:w-3/5 h-full flex flex-col ${isDark ? 'border-r border-white/10' : 'border-r border-gray-200'}`}>
+      <div className={`w-full md:w-1/2 lg:w-3/5 md:h-full md:min-h-0 flex flex-col ${isDark ? 'border-b md:border-b-0 md:border-r border-white/10' : 'border-b md:border-b-0 md:border-r border-gray-200'}`}>
 
         {/* Header */}
         <div className={`h-16 px-6 flex items-center justify-between shrink-0 ${isDark ? 'border-b border-white/10 bg-charcoal' : 'border-b border-gray-200 bg-white'}`}>
@@ -725,7 +782,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Scrollable Form Content */}
-        <div className={`flex-1 overflow-y-auto p-6 scroll-smooth ${isDark ? '' : 'bg-light-grey'}`}>
+        <div className={`md:flex-1 md:min-h-0 md:overflow-y-auto p-6 scroll-smooth ${isDark ? '' : 'bg-light-grey'}`}>
 
           {/* Naming Rules */}
           <section className="mb-8">
@@ -810,10 +867,10 @@ const App: React.FC = () => {
       </div>
 
       {/* RIGHT PANEL: PREVIEW */}
-      <div className={`w-full md:w-1/2 lg:w-2/5 flex flex-col h-full relative ${isDark ? 'bg-[#1a1a1a] border-l border-white/10' : 'bg-white border-l border-gray-200'}`}>
+      <div className={`w-full md:w-1/2 lg:w-2/5 flex flex-col md:h-full md:min-h-0 relative ${isDark ? 'bg-[#1a1a1a] md:border-l border-white/10' : 'bg-white md:border-l border-gray-200'}`}>
 
         {/* Toolbar */}
-        <div className={`h-16 px-4 flex items-center justify-between gap-3 shrink-0 ${isDark ? 'bg-[#1a1a1a] border-b border-white/10' : 'bg-white border-b border-gray-200'}`}>
+        <div className={`min-h-[4rem] px-4 py-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 shrink-0 ${isDark ? 'bg-[#1a1a1a] border-b border-white/10' : 'bg-white border-b border-gray-200'}`}>
           <div className="flex items-center gap-3 min-w-0">
             <span className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 shrink-0">Preview</span>
             {supportsNativeDownload && (
@@ -841,7 +898,7 @@ const App: React.FC = () => {
               </div>
             )}
           </div>
-          <div className="flex gap-2 shrink-0">
+          <div className="flex gap-2 shrink-0 ml-auto">
             <Button size="sm" variant="secondary" onClick={copyToClipboard} className={isDark ? 'bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'}>
                {copied ? <Check size={14} className="mr-1 text-green-600"/> : <Copy size={14} className="mr-1"/>}
                {copied ? "Copied" : "Copy"}
@@ -891,7 +948,7 @@ const App: React.FC = () => {
         </div>
 
         {/* JSON Preview */}
-        <div className={`flex-1 overflow-auto p-4 relative group ${isDark ? 'bg-[#111111]' : 'bg-[#F4F4F4]'}`}>
+        <div className={`max-h-[70vh] md:max-h-none md:flex-1 md:min-h-0 overflow-auto p-4 relative group ${isDark ? 'bg-[#111111]' : 'bg-[#F4F4F4]'}`}>
            <pre className={`font-mono text-xs leading-relaxed p-2 ${isDark ? 'text-gray-300' : 'text-charcoal'}`}>
              {previewJson}
            </pre>

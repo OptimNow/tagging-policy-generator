@@ -1,46 +1,119 @@
-import { Policy, RequiredTag, OptionalTag, CategorizedExportWarnings } from '../types';
+import { Policy, RequiredTag, OptionalTag, CategorizedExportWarnings, AWS_RESOURCE_TYPES } from '../types';
+
+// AWS Organizations tag policy shape (export target and import source)
+interface AwsTagPolicy {
+  tags: {
+    [tagName: string]: {
+      tag_key: { '@@assign': string };
+      tag_value?: { '@@assign': string[] };
+      enforced_for?: { '@@assign': string[] };
+      report_required_tag_for?: { '@@assign': string[] };
+    };
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Enforcement support
+// ---------------------------------------------------------------------------
+// From the AWS table "Resources that support enforcement in tag policies",
+// checked on 12 September 2026:
+// https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_supported-resources-enforcement.html
+// Only the app's resource types are covered.
+
+// Resource types whose own row has Enforcement Mode = Yes. They can be listed
+// individually in enforced_for.
+const ENFORCEABLE_RESOURCE_TYPES = new Set([
+  'ec2:instance', 'ec2:volume', 'ec2:natgateway', 'ec2:vpc', 'ec2:subnet', 'ec2:security-group',
+  'lambda:function',
+  'ecs:service', 'ecs:cluster', 'ecs:task-definition',
+  's3:bucket',
+  'fsx:file-system',
+  'dynamodb:table',
+  'elasticache:cluster',
+  'redshift:cluster',
+  'elasticloadbalancing:loadbalancer', 'elasticloadbalancing:targetgroup',
+]);
+
+// Services whose "<service>:ALL_SUPPORTED" row has Enforcement Mode = Yes. The
+// app's types that have no enforcement row of their own (rds:db, eks:cluster,
+// eks:nodegroup, elasticfilesystem:file-system) can only be enforced through
+// this wildcard, which covers every enforceable type of the service.
+const SERVICES_WITH_WILDCARD_ENFORCEMENT = new Set([
+  'ec2', 'lambda', 'ecs', 'eks', 's3', 'elasticfilesystem', 'fsx', 'rds', 'dynamodb', 'elasticache', 'redshift',
+]);
+
+// Names used by older exports and example files, mapped to the app's names.
+const RESOURCE_TYPE_ALIASES: Record<string, string> = { 'rds:db-instance': 'rds:db' };
+const SERVICE_ALIASES: Record<string, string> = { efs: 'elasticfilesystem' };
+
+const WILDCARD_SUFFIX = ':ALL_SUPPORTED';
+
+function serviceOf(resourceType: string): string {
+  const service = resourceType.split(':')[0];
+  return SERVICE_ALIASES[service] || service;
+}
+
+function normaliseResourceType(entry: string): string {
+  const colon = entry.indexOf(':');
+  if (colon <= 0) return entry;
+  const type = `${serviceOf(entry)}${entry.slice(colon)}`;
+  return RESOURCE_TYPE_ALIASES[type] || type;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+// ---------------------------------------------------------------------------
+// Import: AWS Organizations tag policy -> MCP Policy
+// ---------------------------------------------------------------------------
 
 export function convertAwsPolicyToMcp(awsPolicyString: string): Policy {
-  let awsPolicy;
+  let awsPolicy: unknown;
   try {
     awsPolicy = JSON.parse(awsPolicyString);
-  } catch (e) {
+  } catch {
     throw new Error("Invalid JSON format");
   }
 
-  const tags = awsPolicy.tags || {};
+  const tags = awsPolicy && typeof awsPolicy === 'object' ? (awsPolicy as Record<string, unknown>).tags : undefined;
+  if (!tags || typeof tags !== 'object' || Array.isArray(tags)) {
+    throw new Error('Unrecognised format. Paste an AWS Organizations tag policy (with a top-level "tags" object) or a policy JSON saved from this tool.');
+  }
+
   const requiredTags: RequiredTag[] = [];
   const optionalTags: OptionalTag[] = [];
-  
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const [key, config] of Object.entries(tags) as [string, any][]) {
-    const tagName = config.tag_key?.['@@assign'] || key;
-    const allowedValues = config.tag_value?.['@@assign'] || null;
-    const enforcedFor = config.enforced_for?.['@@assign'] || [];
-    
-    const appliesTo = enforcedFor.length > 0
-      ? parseEnforcedFor(enforcedFor)
-      : ['ec2:instance', 's3:bucket', 'lambda:function']; // Default fallback (only supported types)
-    
+  for (const [key, rawConfig] of Object.entries(tags as Record<string, any>)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const config: Record<string, any> = rawConfig && typeof rawConfig === 'object' ? rawConfig : {};
+    const tagKey = config.tag_key?.['@@assign'];
+    const tagName = typeof tagKey === 'string' && tagKey ? tagKey : key;
+    const allowed = stringList(config.tag_value?.['@@assign']);
+    const enforcedFor = stringList(config.enforced_for?.['@@assign']);
+    const reportFor = stringList(config.report_required_tag_for?.['@@assign']);
     const description = `Converted from AWS Organizations tag policy - ${key}`;
 
-    if (enforcedFor.length > 0) {
+    // A tag is required when the policy enforces it or reports it as required.
+    // Types AWS can't enforce appear only in report_required_tag_for.
+    if (enforcedFor.length > 0 || reportFor.length > 0) {
       requiredTags.push({
         name: tagName,
         description,
-        allowed_values: allowedValues,
+        allowed_values: allowed.length > 0 ? allowed : null,
         validation_regex: null,
-        applies_to: appliesTo
+        applies_to: resolveAppliesTo(enforcedFor, reportFor),
       });
     } else {
       optionalTags.push({
         name: tagName,
         description,
-        allowed_values: allowedValues
+        allowed_values: allowed.length > 0 ? allowed : null,
       });
     }
   }
-  
+
   return {
     version: "1.0",
     last_updated: new Date().toISOString(),
@@ -56,270 +129,118 @@ export function convertAwsPolicyToMcp(awsPolicyString: string): Policy {
   };
 }
 
-function parseEnforcedFor(enforcedFor: string[]): string[] {
-  const appliesTo: string[] = [];
-  // Map AWS service wildcards to specific resource types
-  // Using AWS's actual enforced_for resource type names
-  const serviceMap: Record<string, string[]> = {
-    // Compute
-    'ec2': ['ec2:instance', 'ec2:volume', 'ec2:snapshot', 'ec2:natgateway'],
-    'lambda': ['lambda:function'],
-    'ecs': ['ecs:service', 'ecs:task-definition'],
-    'eks': ['eks:cluster', 'eks:nodegroup'],
+function resolveAppliesTo(enforcedFor: string[], reportFor: string[]): string[] {
+  const result: string[] = [];
+  const add = (type: string) => { if (!result.includes(type)) result.push(type); };
 
-    // Storage
-    's3': ['s3:bucket'],
-    'elasticfilesystem': ['elasticfilesystem:file-system'],
-    'efs': ['elasticfilesystem:file-system'], // alias
-    'fsx': ['fsx:file-system'],
-
-    // Database
-    'rds': ['rds:db-instance', 'rds:cluster'],
-    'dynamodb': ['dynamodb:table'],
-    'elasticache': ['elasticache:cluster'],
-    'redshift': ['redshift:cluster'],
-    'es': ['es:domain'],
-    'opensearch': ['es:domain'], // alias - OpenSearch uses es: prefix in tag policies
-
-    // AI/ML
-    'sagemaker': ['sagemaker:endpoint', 'sagemaker:notebook-instance'],
-    'bedrock': ['bedrock:provisioned-model-throughput'],
-
-    // Networking
-    'elasticloadbalancing': ['elasticloadbalancing:loadbalancer'],
-
-    // Analytics & Streaming
-    'kinesis': ['kinesis:stream'],
-    'glue': ['glue:job']
-  };
-
-  for (const resource of enforcedFor) {
-    if (resource.includes(':ALL_SUPPORTED')) {
-      const service = resource.split(':')[0];
-      if (serviceMap[service]) {
-        appliesTo.push(...serviceMap[service]);
-      } else {
-        appliesTo.push(`${service}:resource`); // Fallback
-      }
-    } else {
-      appliesTo.push(resource);
-    }
+  // Exact resource types, from reporting first, then enforcement.
+  for (const entry of [...reportFor, ...enforcedFor]) {
+    if (!entry.endsWith(WILDCARD_SUFFIX)) add(normaliseResourceType(entry));
   }
 
-  return [...new Set(appliesTo)]; // Remove duplicates
+  // A service wildcard widens the scope only for services the policy lists no
+  // exact type for, so a policy exported by this tool returns the original
+  // selection instead of every resource type of the service.
+  for (const entry of enforcedFor) {
+    if (!entry.endsWith(WILDCARD_SUFFIX)) continue;
+    const service = serviceOf(entry);
+    if (result.some(type => serviceOf(type) === service)) continue;
+    const known = AWS_RESOURCE_TYPES.filter(type => serviceOf(type) === service);
+    // Without app types for the service, keep the wildcard itself so the editor
+    // shows it and the user can remove it.
+    if (known.length > 0) known.forEach(add);
+    else add(`${service}${WILDCARD_SUFFIX}`);
+  }
+
+  return result;
 }
 
-// AWS Tag Policy format structure
-interface AwsTagPolicy {
-  tags: {
-    [tagName: string]: {
-      tag_key: { '@@assign': string };
-      tag_value?: { '@@assign': string[] };
-      enforced_for?: { '@@assign': string[] };
-      report_required_tag_for?: { '@@assign': string[] };
-    };
+// ---------------------------------------------------------------------------
+// Export: MCP Policy -> AWS Organizations tag policy
+// ---------------------------------------------------------------------------
+
+interface EnforcementPlan {
+  enforcedFor: string[];                              // enforced_for entries
+  reportFor: string[];                                // report_required_tag_for entries
+  widened: { service: string; selected: string[] }[]; // enforced only via service:ALL_SUPPORTED
+  reportOnly: string[];                               // AWS can't enforce these types
+  unknown: string[];                                  // not AWS tag policy resource types
+}
+
+function planEnforcement(appliesTo: string[]): EnforcementPlan {
+  const normalised = [...new Set(appliesTo.map(normaliseResourceType))];
+  const known = normalised.filter(type => AWS_RESOURCE_TYPES.includes(type));
+  const unknown = normalised.filter(type => !AWS_RESOURCE_TYPES.includes(type));
+
+  const specific: string[] = [];
+  const widened = new Map<string, string[]>();
+  const reportOnly: string[] = [];
+  for (const type of known) {
+    const service = serviceOf(type);
+    if (ENFORCEABLE_RESOURCE_TYPES.has(type)) specific.push(type);
+    else if (SERVICES_WITH_WILDCARD_ENFORCEMENT.has(service)) widened.set(service, [...(widened.get(service) || []), type]);
+    else reportOnly.push(type);
+  }
+
+  // A service wildcard already covers that service's individual types.
+  const enforcedFor = [
+    ...specific.filter(type => !widened.has(serviceOf(type))),
+    ...[...widened.keys()].map(service => `${service}${WILDCARD_SUFFIX}`),
+  ];
+
+  return {
+    enforcedFor,
+    reportFor: known,
+    widened: [...widened].map(([service, selected]) => ({ service, selected })),
+    reportOnly,
+    unknown,
   };
 }
 
 /**
- * Services that support enforced_for with ALL_SUPPORTED syntax.
- * Only these services can be used in the enforced_for field.
- * Reference: https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_supported-resources-enforcement.html
- * 
- * A service is included here only if its ALL_SUPPORTED entry has "Enforcement Mode: Yes"
- */
-const SERVICES_WITH_ENFORCEMENT_SUPPORT = new Set([
-  'ec2',
-  's3', 
-  'lambda',
-  'dynamodb',
-  'elasticache',
-  'redshift',
-  'rds',
-  'eks',
-  'ecs',
-  'acm',
-  'appmesh',
-  'backup',
-  'backup-gateway',
-  'batch',
-  'auditmanager',
-  'elasticfilesystem',
-  // Note: elasticloadbalancing does NOT support enforcement mode, only reporting
-  // Add more as AWS adds support
-]);
-
-/**
- * Convert specific resource types to AWS service:ALL_SUPPORTED format for enforced_for.
- * AWS enforced_for only accepts service:ALL_SUPPORTED syntax, not specific resource types.
- * Only includes services that actually support enforcement.
- * 
- * Example: ['ec2:instance', 'rds:db', 'sagemaker:endpoint'] 
- *       -> ['ec2:ALL_SUPPORTED', 'rds:ALL_SUPPORTED'] (sagemaker excluded - no enforcement support)
- */
-function convertToEnforcedForFormat(resourceTypes: string[]): string[] {
-  const services = new Set<string>();
-  
-  for (const resource of resourceTypes) {
-    // Extract service name from resource type (e.g., 'ec2:instance' -> 'ec2')
-    const colonIndex = resource.indexOf(':');
-    if (colonIndex > 0) {
-      const service = resource.substring(0, colonIndex);
-      // Only include services that support enforcement
-      if (SERVICES_WITH_ENFORCEMENT_SUPPORT.has(service)) {
-        services.add(service);
-      }
-    }
-  }
-  
-  // Convert to service:ALL_SUPPORTED format
-  return Array.from(services).map(service => `${service}:ALL_SUPPORTED`);
-}
-
-/**
- * Convert resource types to valid report_required_tag_for format.
- * Filters out invalid resource types that AWS doesn't recognize.
- * 
- * AWS only accepts specific resource type formats in report_required_tag_for.
- * Some resource types from our app may not be valid AWS tag policy resource types.
- */
-function convertToReportRequiredFormat(resourceTypes: string[]): string[] {
-  // Map our internal resource types to valid AWS tag policy resource types
-  const resourceTypeMapping: Record<string, string> = {
-    // RDS mappings - AWS uses 'rds:db' not 'rds:db-instance'
-    'rds:db-instance': 'rds:db',
-    'rds:db': 'rds:db',
-    'rds:cluster': 'rds:cluster',
-    
-    // EKS mappings
-    'eks:cluster': 'eks:cluster',
-    'eks:nodegroup': 'eks:nodegroup',
-    
-    // EC2 mappings
-    'ec2:instance': 'ec2:instance',
-    'ec2:volume': 'ec2:volume',
-    'ec2:natgateway': 'ec2:natgateway',
-    'ec2:vpc': 'ec2:vpc',
-    'ec2:subnet': 'ec2:subnet',
-    'ec2:security-group': 'ec2:security-group',
-    
-    // S3 mappings
-    's3:bucket': 's3:bucket',
-    
-    // EFS mappings
-    'elasticfilesystem:file-system': 'elasticfilesystem:file-system',
-    
-    // FSx mappings
-    'fsx:file-system': 'fsx:file-system',
-    
-    // Lambda mappings
-    'lambda:function': 'lambda:function',
-    
-    // ECS mappings
-    'ecs:service': 'ecs:service',
-    'ecs:cluster': 'ecs:cluster',
-    'ecs:task-definition': 'ecs:task-definition',
-    
-    // DynamoDB mappings
-    'dynamodb:table': 'dynamodb:table',
-    
-    // ElastiCache mappings
-    'elasticache:cluster': 'elasticache:cluster',
-    
-    // Redshift mappings
-    'redshift:cluster': 'redshift:cluster',
-    
-    // ELB mappings
-    'elasticloadbalancing:loadbalancer': 'elasticloadbalancing:loadbalancer',
-    'elasticloadbalancing:targetgroup': 'elasticloadbalancing:targetgroup',
-    
-    // Glue mappings
-    'glue:job': 'glue:job',
-    
-    // Kinesis mappings
-    'kinesis:stream': 'kinesis:stream',
-    
-    // SageMaker mappings
-    'sagemaker:endpoint': 'sagemaker:endpoint',
-    'sagemaker:notebook-instance': 'sagemaker:notebook-instance',
-    
-    // Bedrock mappings - these may not be supported in tag policies yet
-    'bedrock:agent': 'bedrock:agent',
-    'bedrock:knowledge-base': 'bedrock:knowledge-base',
-  };
-  
-  const validResourceTypes: string[] = [];
-  
-  for (const resource of resourceTypes) {
-    const mapped = resourceTypeMapping[resource];
-    if (mapped) {
-      validResourceTypes.push(mapped);
-    } else {
-      // If not in mapping, try to use as-is (AWS may accept it)
-      validResourceTypes.push(resource);
-    }
-  }
-  
-  return [...new Set(validResourceTypes)]; // Remove duplicates
-}
-
-/**
- * Convert our policy format to AWS Organizations Tag Policy format.
+ * Convert our policy format to an AWS Organizations tag policy.
  *
- * AWS Tag Policy rules:
- * - enforced_for: Only accepts service:ALL_SUPPORTED format (e.g., 'rds:ALL_SUPPORTED')
- *   This prevents noncompliant tagging operations for the specified services.
- *   Only services with "Enforcement Mode: Yes" can be used here.
- * - report_required_tag_for: Accepts specific resource types (e.g., 'rds:db')
- *   This drives compliance reporting for the specified resource types.
+ * - enforced_for lists each selected resource type that AWS can enforce on its
+ *   own. Types that AWS can enforce only service-wide (rds:db, EKS, EFS) use
+ *   "<service>:ALL_SUPPORTED", and getAwsExportWarnings says so.
+ * - report_required_tag_for lists every selected resource type AWS recognises,
+ *   which drives compliance reporting.
  *
- * Note: AWS Tag Policies do not support regex validation, so validation_regex
- * fields will be ignored in the export. Only allowed_values will be converted.
+ * AWS tag policies have no regex support, so validation_regex is dropped.
  */
 export function convertMcpToAwsPolicy(policy: Policy): AwsTagPolicy {
   const awsPolicy: AwsTagPolicy = { tags: {} };
 
-  // Process required tags
-  for (const tag of policy.required_tags) {
+  for (const tag of policy.required_tags || []) {
     const tagConfig: AwsTagPolicy['tags'][string] = {
       tag_key: { '@@assign': tag.name }
     };
 
-    // Add allowed values if specified
     if (tag.allowed_values && tag.allowed_values.length > 0) {
       tagConfig.tag_value = { '@@assign': tag.allowed_values };
     }
 
-    // Convert applies_to to proper AWS format
-    if (tag.applies_to && tag.applies_to.length > 0) {
-      // enforced_for: Use service:ALL_SUPPORTED format for services that support enforcement
-      const enforcedForServices = convertToEnforcedForFormat(tag.applies_to);
-      if (enforcedForServices.length > 0) {
-        tagConfig.enforced_for = { '@@assign': enforcedForServices };
-      }
-      
-      // report_required_tag_for: Use specific resource types for compliance reporting
-      const reportRequiredFor = convertToReportRequiredFormat(tag.applies_to);
-      if (reportRequiredFor.length > 0) {
-        tagConfig.report_required_tag_for = { '@@assign': reportRequiredFor };
-      }
+    const plan = planEnforcement(tag.applies_to || []);
+    if (plan.enforcedFor.length > 0) {
+      tagConfig.enforced_for = { '@@assign': plan.enforcedFor };
+    }
+    if (plan.reportFor.length > 0) {
+      tagConfig.report_required_tag_for = { '@@assign': plan.reportFor };
     }
 
     awsPolicy.tags[tag.name] = tagConfig;
   }
 
-  // Process optional tags (no enforced_for or report_required_tag_for)
-  for (const tag of policy.optional_tags) {
+  // Optional tags carry no enforced_for or report_required_tag_for.
+  for (const tag of policy.optional_tags || []) {
     const tagConfig: AwsTagPolicy['tags'][string] = {
       tag_key: { '@@assign': tag.name }
     };
 
-    // Add allowed values if specified
     if (tag.allowed_values && tag.allowed_values.length > 0) {
       tagConfig.tag_value = { '@@assign': tag.allowed_values };
     }
 
-    // Optional tags don't have enforced_for in AWS format
     awsPolicy.tags[tag.name] = tagConfig;
   }
 
@@ -327,16 +248,48 @@ export function convertMcpToAwsPolicy(policy: Policy): AwsTagPolicy {
 }
 
 /**
- * Check if the policy has features that won't be preserved in AWS format
+ * Lists what the AWS export can't carry or changes: dropped regexes, scope
+ * widened to a service wildcard, types AWS can't enforce, and unknown types.
  */
 export function getAwsExportWarnings(policy: Policy): CategorizedExportWarnings {
   const limitations: string[] = [];
   const deploymentNotes: string[] = [];
+  const requiredTags = policy.required_tags || [];
 
-  const tagsWithRegex = policy.required_tags.filter(t => t.validation_regex);
+  const tagsWithRegex = requiredTags.filter(t => t.validation_regex);
   if (tagsWithRegex.length > 0) {
     const tagNames = tagsWithRegex.map(t => t.name).join(', ');
     limitations.push(`Regex validation will be dropped for ${tagNames}. AWS Tag Policies have no regex support — rely on allowed_values instead.`);
+  }
+
+  const widened = new Map<string, { types: Set<string>; tags: Set<string> }>();
+  const reportOnlyTypes = new Set<string>();
+  const reportOnlyTags = new Set<string>();
+  const unknown: string[] = [];
+
+  for (const tag of requiredTags) {
+    const plan = planEnforcement(tag.applies_to || []);
+    for (const { service, selected } of plan.widened) {
+      const entry = widened.get(service) || { types: new Set<string>(), tags: new Set<string>() };
+      selected.forEach(type => entry.types.add(type));
+      entry.tags.add(tag.name);
+      widened.set(service, entry);
+    }
+    if (plan.reportOnly.length > 0) {
+      plan.reportOnly.forEach(type => reportOnlyTypes.add(type));
+      reportOnlyTags.add(tag.name);
+    }
+    plan.unknown.forEach(type => unknown.push(`${type} (${tag.name})`));
+  }
+
+  for (const [service, { types, tags }] of widened) {
+    limitations.push(`AWS can't enforce tags on ${[...types].join(', ')} by itself, so ${[...tags].join(', ')} ${tags.size === 1 ? 'is' : 'are'} enforced through ${service}:ALL_SUPPORTED. That also covers every other ${service} resource type that supports enforcement.`);
+  }
+  if (reportOnlyTypes.size > 0) {
+    limitations.push(`AWS tag policies can't enforce tags on ${[...reportOnlyTypes].join(', ')}. Missing ${[...reportOnlyTags].join(', ')} tags on these resources will show in compliance reports but won't be blocked.`);
+  }
+  if (unknown.length > 0) {
+    limitations.push(`Left out of the policy because AWS tag policies don't recognise these resource types: ${unknown.join(', ')}.`);
   }
 
   return { limitations, deploymentNotes };

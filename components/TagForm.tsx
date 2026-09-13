@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { RequiredTag, OptionalTag, CloudProvider, getResourceCategories, getResourceTypes } from '../types';
 import { Input, TextArea, Checkbox } from './Input';
 import { Button } from './Button';
 import { useTheme } from '../context/ThemeContext';
-import { Trash2, ChevronDown, ChevronUp, AlertCircle, CheckCircle, ChevronRight, Copy, Check } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronUp, AlertCircle, CheckCircle, ChevronRight, Copy, Check, X } from 'lucide-react';
 import { generateAzurePortalJson } from '../services/azure-converter';
 
 interface TagFormProps {
@@ -15,9 +15,12 @@ interface TagFormProps {
   index: number;
 }
 
+const PROVIDER_LABEL: Record<CloudProvider, string> = { aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
+
 export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider, onChange, onRemove, index }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const bodyId = useId();
   const resourceCategories = getResourceCategories(cloudProvider);
   const allResourceTypes = getResourceTypes(cloudProvider);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -30,6 +33,13 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
     setExpandedCategories(new Set());
   }, [cloudProvider]);
 
+  const appliesTo = isRequired ? ((tag as RequiredTag).applies_to || []) : [];
+  // Resource types no checkbox represents, e.g. from an imported policy or an
+  // older file. They are listed separately so they can be removed; otherwise
+  // they would fail validation with no way to untick them.
+  const unknownResourceTypes = appliesTo.filter(r => !allResourceTypes.includes(r));
+  const tagLabel = tag.name || (isRequired ? `Required Tag #${index + 1}` : `Optional Tag #${index + 1}`);
+
   const handleAllowedValuesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     onChange({
@@ -40,27 +50,23 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
 
   const handleAppliesToChange = (resource: string) => {
     if (!isRequired) return;
-    const current = (tag as RequiredTag).applies_to;
-    const updated = current.includes(resource)
-      ? current.filter(r => r !== resource)
-      : [...current, resource];
-
-    onChange({
-      ...tag,
-      applies_to: updated
-    } as RequiredTag);
+    const updated = appliesTo.includes(resource)
+      ? appliesTo.filter(r => r !== resource)
+      : [...appliesTo, resource];
+    onChange({ ...tag, applies_to: updated } as RequiredTag);
   };
 
   const handleApplyToAll = (checked: boolean) => {
     if (!isRequired) return;
-    onChange({
-      ...tag,
-      applies_to: checked ? [...allResourceTypes] : []
-    } as RequiredTag);
+    onChange({ ...tag, applies_to: checked ? [...allResourceTypes] : [] } as RequiredTag);
   };
 
-  const isAllSelected = isRequired &&
-    (tag as RequiredTag).applies_to.length === allResourceTypes.length;
+  const removeResourceType = (resource: string) => {
+    if (!isRequired) return;
+    onChange({ ...tag, applies_to: appliesTo.filter(r => r !== resource) } as RequiredTag);
+  };
+
+  const isAllSelected = isRequired && allResourceTypes.every(r => appliesTo.includes(r));
 
   const toggleCategory = (categoryName: string) => {
     setExpandedCategories(prev => {
@@ -76,36 +82,21 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
 
   const handleCategoryToggle = (categoryResources: string[], checked: boolean) => {
     if (!isRequired) return;
-    const current = (tag as RequiredTag).applies_to;
-    let updated: string[];
-    if (checked) {
-      updated = [...new Set([...current, ...categoryResources])];
-    } else {
-      updated = current.filter(r => !categoryResources.includes(r));
-    }
-    onChange({
-      ...tag,
-      applies_to: updated
-    } as RequiredTag);
+    const updated = checked
+      ? [...new Set([...appliesTo, ...categoryResources])]
+      : appliesTo.filter(r => !categoryResources.includes(r));
+    onChange({ ...tag, applies_to: updated } as RequiredTag);
   };
 
-  const isCategoryFullySelected = (categoryResources: string[]) => {
-    if (!isRequired) return false;
-    const current = (tag as RequiredTag).applies_to;
-    return categoryResources.every(r => current.includes(r));
-  };
+  const getCategorySelectedCount = (categoryResources: string[]) =>
+    categoryResources.filter(r => appliesTo.includes(r)).length;
+
+  const isCategoryFullySelected = (categoryResources: string[]) =>
+    isRequired && categoryResources.every(r => appliesTo.includes(r));
 
   const isCategoryPartiallySelected = (categoryResources: string[]) => {
-    if (!isRequired) return false;
-    const current = (tag as RequiredTag).applies_to;
-    const selectedCount = categoryResources.filter(r => current.includes(r)).length;
-    return selectedCount > 0 && selectedCount < categoryResources.length;
-  };
-
-  const getCategorySelectedCount = (categoryResources: string[]) => {
-    if (!isRequired) return 0;
-    const current = (tag as RequiredTag).applies_to;
-    return categoryResources.filter(r => current.includes(r)).length;
+    const selectedCount = getCategorySelectedCount(categoryResources);
+    return isRequired && selectedCount > 0 && selectedCount < categoryResources.length;
   };
 
   const testRegex = () => {
@@ -123,7 +114,7 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
   const handleCopyAzureJson = async (e: React.MouseEvent) => {
     e.stopPropagation();
     const effect = isRequired ? 'deny' : 'audit';
-    const json = generateAzurePortalJson(tag.name, tag.description, effect, tag.allowed_values);
+    const json = generateAzurePortalJson(tag.name, tag.description, effect, tag.allowed_values, appliesTo);
     try {
       await navigator.clipboard.writeText(JSON.stringify(json, null, 2));
       setAzureCopied(true);
@@ -133,47 +124,59 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
     }
   };
 
+  const toggleExpanded = () => setIsExpanded(prev => !prev);
+
   return (
     <div className={`rounded-lg overflow-hidden mb-4 transition-all ${isDark ? 'bg-white/5 border border-white/10 hover:border-white/20' : 'bg-white border border-gray-200 hover:border-gray-300'}`}>
-      {/* Header */}
-      <div
-        className={`flex items-center justify-between p-4 cursor-pointer select-none ${isDark ? 'bg-white/5' : 'bg-gray-50'}`}
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <div className="flex items-center gap-3">
-            <div className={`w-2 h-8 rounded-full ${isRequired ? 'bg-chartreuse' : 'bg-gray-500'}`}></div>
-            <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-charcoal'}`}>
-                {tag.name || (isRequired ? `Required Tag #${index + 1}` : `Optional Tag #${index + 1}`)}
-            </h3>
-            {!tag.name && <span className="text-xs text-red-400 flex items-center gap-1"><AlertCircle size={12}/> Name required</span>}
-        </div>
-        <div className="flex items-center gap-2">
-            {cloudProvider === 'azure' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCopyAzureJson}
-                className={azureCopied ? 'text-white bg-green-600 hover:bg-green-600' : 'text-white bg-green-600 hover:bg-green-700'}
-                title="Copy Azure Policy JSON — paste directly into Azure Portal"
-              >
-                {azureCopied ? <><Check size={14} className="mr-1" /> Copied</> : <><Copy size={14} className="mr-1" /> Azure JSON</>}
-              </Button>
-            )}
+      {/* Header. The title is a disclosure button inside a heading (the WAI-ARIA
+          accordion pattern), so keyboard and screen-reader users can open the
+          card. The action buttons sit beside it, not inside it. */}
+      <div className={`flex items-center justify-between gap-2 pr-4 ${isDark ? 'bg-white/5' : 'bg-gray-50'}`}>
+        <h3 className="flex-1 min-w-0">
+          <button
+            type="button"
+            onClick={toggleExpanded}
+            aria-expanded={isExpanded}
+            aria-controls={bodyId}
+            className="w-full flex items-center gap-3 p-4 text-left select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-chartreuse"
+          >
+            <span aria-hidden="true" className={`w-2 h-8 rounded-full shrink-0 ${isRequired ? 'bg-chartreuse' : 'bg-gray-500'}`}></span>
+            <span className={`font-semibold truncate ${isDark ? 'text-white' : 'text-charcoal'}`}>{tagLabel}</span>
+            {!tag.name && <span className="text-xs text-red-400 flex items-center gap-1 shrink-0"><AlertCircle size={12} aria-hidden="true" /> Name required</span>}
+          </button>
+        </h3>
+        <div className="flex items-center gap-2 shrink-0">
+          {cloudProvider === 'azure' && (
             <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => { e.stopPropagation(); onRemove(); }}
-                className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+              variant="primary"
+              size="sm"
+              onClick={handleCopyAzureJson}
+              title="Copy Azure Policy JSON — paste directly into Azure Portal"
             >
-                <Trash2 size={16} />
+              {azureCopied ? <><Check size={14} className="mr-1" aria-hidden="true" /> Copied</> : <><Copy size={14} className="mr-1" aria-hidden="true" /> Azure JSON</>}
             </Button>
-            {isExpanded ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+            aria-label={`Delete ${tagLabel}`}
+            title={`Delete ${tagLabel}`}
+          >
+            <Trash2 size={16} aria-hidden="true" />
+          </Button>
+          {/* Mouse shortcut for the same toggle. Hidden from assistive tech,
+              because the title button already provides it. */}
+          <button type="button" tabIndex={-1} aria-hidden="true" onClick={toggleExpanded} className="p-1 text-gray-400">
+            {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
         </div>
       </div>
 
       {/* Body */}
       {isExpanded && (
-        <div className={`p-4 space-y-4 ${isDark ? 'border-t border-white/10' : 'border-t border-gray-200'}`}>
+        <div id={bodyId} className={`p-4 space-y-4 ${isDark ? 'border-t border-white/10' : 'border-t border-gray-200'}`}>
           <Input
             label="Tag Name"
             placeholder={cloudProvider === 'gcp' ? 'e.g. cost_center' : 'e.g. CostCenter'}
@@ -224,7 +227,14 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
                                 setRegexTestResult(null);
                             }}
                           />
-                          <Button variant="ghost" size="sm" onClick={testRegex} className={`text-chartreuse font-semibold ${isDark ? 'hover:text-white' : 'hover:text-charcoal'}`}>Run</Button>
+                          <Button
+                            variant="unstyled"
+                            size="sm"
+                            onClick={testRegex}
+                            className={`font-semibold ${isDark ? 'text-chartreuse hover:text-white' : 'text-lime-800 hover:text-charcoal'}`}
+                          >
+                            Run
+                          </Button>
                           {regexTestResult === true && <CheckCircle size={16} className="text-chartreuse"/>}
                           {regexTestResult === false && <AlertCircle size={16} className="text-red-500"/>}
                       </div>
@@ -292,7 +302,7 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
                               <Checkbox
                                 key={resource}
                                 label={resource}
-                                checked={(tag as RequiredTag).applies_to.includes(resource)}
+                                checked={appliesTo.includes(resource)}
                                 onChange={() => handleAppliesToChange(resource)}
                               />
                             ))}
@@ -302,7 +312,27 @@ export const TagForm: React.FC<TagFormProps> = ({ tag, isRequired, cloudProvider
                     );
                   })}
                 </div>
-                {(tag as RequiredTag).applies_to.length === 0 && <span className="text-xs text-red-400">Select at least one resource.</span>}
+                {unknownResourceTypes.length > 0 && (
+                  <div className={`rounded p-3 flex flex-col gap-2 text-xs ${isDark ? 'bg-red-500/10 border border-red-500/30 text-red-200' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                    <span>Not in the {PROVIDER_LABEL[cloudProvider]} resource list, so these fail validation. Remove them, and tick the types you want above.</span>
+                    <ul className="flex flex-wrap gap-2">
+                      {unknownResourceTypes.map(resource => (
+                        <li key={resource} className={`inline-flex items-center gap-1 rounded-full pl-2.5 pr-1 py-0.5 font-mono ${isDark ? 'bg-black/30' : 'bg-white border border-red-200'}`}>
+                          {resource}
+                          <button
+                            type="button"
+                            onClick={() => removeResourceType(resource)}
+                            aria-label={`Remove ${resource}`}
+                            className="p-0.5 rounded-full hover:bg-red-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                          >
+                            <X size={12} aria-hidden="true" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {appliesTo.length === 0 && <span className="text-xs text-red-400">Select at least one resource.</span>}
               </div>
             </>
           )}
