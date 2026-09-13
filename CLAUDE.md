@@ -233,8 +233,7 @@ Note: an earlier version emitted `tagInheritanceRecommendations` and `managedRes
 
 The application is 100% client-side:
 - No backend API calls. Besides the app itself, the page loads the Tailwind CDN and Google Fonts
-- Uses Vercel Analytics (`<Analytics />` in index.tsx) for page views and Web Vitals
-- Uses Google Analytics 4 (`G-188H55KPFM`, set up in index.html). A hostname guard limits it to `optimnow.io` hosts and localhost, so forks don't report into OptimNow's property. `App.tsx` sends events through `window.trackEvent`: `optimnow_cta_clicked`, `template_applied` (template name, provider) and `policy_downloaded` (format). Events carry no policy content
+- Uses Vercel Analytics (`<Analytics />` in index.tsx) for page views and Web Vitals. It sets no cookies and is the only analytics. Google Analytics was removed in September 2026 because it set cookies without a consent banner; do not add cookie-based tracking without one
 - No server-side processing
 - Policies never leave the browser unless user explicitly downloads
 

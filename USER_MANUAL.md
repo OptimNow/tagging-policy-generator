@@ -2,7 +2,7 @@
 
 Welcome to the FinOps Tagging Policy Generator. This guide walks you through everything you need to know to create effective tagging and labeling policies for cloud cost attribution across AWS, GCP, and Azure.
 
-**Live App:** [tagpolgenerator.optimnow.io](http://tagpolgenerator.optimnow.io/)
+**Live App:** [tagpolgenerator.optimnow.io](https://tagpolgenerator.optimnow.io/)
 
 ---
 
@@ -12,7 +12,7 @@ The FinOps Tagging Policy Generator helps you define tagging policies that answe
 
 Without consistent tagging, your cost reports are filled with "unallocated" spend. Finance can't charge back to the right departments. Engineering can't identify which services are driving costs. Nobody can answer "how much does Project X actually cost us?"
 
-This tool solves that problem by letting you visually build tagging policies that specify which tags (or labels, in GCP terminology) are required, what values are acceptable, and which resources need them. The output is a JSON policy file you can use with compliance checking tools, export to your cloud provider's native format (AWS Organizations Tag Policy or Azure Policy Initiative), or share with your teams as documentation.
+This tool solves that problem by letting you visually build tagging policies that specify which tags (or labels, in GCP terminology) are required, what values are acceptable, and which resources need them. The output is a JSON policy file you can use with compliance checking tools, export to your cloud provider's native format (an AWS Organizations tag policy, or an Azure Policy bundle you deploy with one command), or share with your teams as documentation.
 
 Everything runs in your browser. No data leaves your machine, no API keys required, no backend to worry about.
 
@@ -36,7 +36,7 @@ At the top, use the **provider toggle** to select AWS, GCP, or Azure. This deter
 Pick **Start Blank** to begin with an empty policy for your selected provider, or choose from built-in templates designed for common FinOps scenarios:
 
 - **Cost Allocation** - The foundational tags for chargeback and showback: CostCenter, Owner, and Environment
-- **Security & Compliance** (AWS) / **Startup** (GCP, Azure) - Adds compliance or operational tags appropriate for the provider
+- **Startup** - A short policy for small teams that need cost visibility without heavy process
 - **Enterprise** - A comprehensive policy for larger organizations with multiple teams and projects
 - **Minimal Starter** - A lightweight starting point for teams just beginning their FinOps journey
 
@@ -46,10 +46,10 @@ Templates automatically populate with provider-appropriate tag names (e.g., Pasc
 
 Below the create section, you'll find four cards arranged in two rows:
 
-- **Import AWS Policy / Export to AWS Policy** — Convert between the generator's format and AWS Organizations Tag Policy format
-- **Import Azure Policy / Export to Azure Policy** — Convert between the generator's format and Azure Policy Initiative format
+- **Import AWS Policy / Export to AWS Policy** convert between the generator's format and the AWS Organizations tag policy format
+- **Import Azure Policy / Export to Azure Policy** convert between the generator's format and the Azure tagging bundle (an ARM template)
 
-**Importing** lets you paste an existing native policy to convert it into the generator's format for editing. **Exporting** lets you paste a generator JSON policy and get it converted to native format, copied to your clipboard.
+**Importing** lets you paste an existing native policy to convert it into the generator's format for editing. Either import card also reloads a policy JSON you downloaded from this tool, whatever its cloud. **Exporting** lets you paste a generator JSON policy and get it converted to native format, copied to your clipboard.
 
 > **Note on GCP:** There are no GCP import/export tiles because GCP does not have a native label policy format that can be uploaded to the GCP console. The GCP policy you build here is exported as the generator's JSON format and is designed to be used with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp) for compliance monitoring. See [How It Works for GCP](#how-it-works-for-gcp) for details.
 
@@ -114,13 +114,15 @@ As your tagging maturity improves, you might graduate optional tags to required 
 
 When your policy is ready, the Download button in the editor offers multiple formats:
 
-**JSON** exports the native policy file. This format works with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp) and integrates with other automation tools. The filename reflects your provider (e.g., `aws-tagging-policy.json`, `gcp-label-policy.json`, `azure-tagging-policy.json`). For GCP policies, this is the primary export format — see [How It Works for GCP](#how-it-works-for-gcp).
+**JSON** exports the native policy file. This format works with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp) and integrates with other automation tools. The filename reflects your provider (`tagging_policy.json` for AWS, `gcp_tagging_policy.json`, `azure_tagging_policy.json`). For GCP policies, this is the primary export format — see [How It Works for GCP](#how-it-works-for-gcp).
 
 **Markdown** generates a human-readable document you can share with teams, include in wikis, or add to onboarding documentation. Always available regardless of provider.
 
 **AWS Tag Policy** (shown for AWS policies) exports a policy ready to paste into AWS Organizations. The generator automatically converts your resource selections into the correct AWS syntax.
 
-**Azure Policy Initiative** (shown for Azure policies) exports an Azure Policy Initiative with one policy definition per tag. Required tags use deny effect; optional tags use audit effect.
+**Azure Policy** (shown for Azure policies) exports `azure_tagging_bundle.json`, an ARM template you deploy with one Azure CLI command. It creates the tag rules and groups them in an initiative: required tags are denied on the resource types you selected, and optional tags are audited. See [Deploy the tagging bundle](#deploy-the-tagging-bundle).
+
+Before an AWS or Azure download, the generator shows what the target format can't carry over (such as regex patterns) and any notes about deploying it.
 
 ---
 
@@ -160,7 +162,9 @@ Tags for `MaintenanceWindow`, `BackupSchedule`, `AutoShutdown`, or `DataClassifi
 
 Policies are not saved automatically or stored anywhere. This is intentional: your tagging strategy is yours, and nothing is transmitted to external servers.
 
-Use the Download button to save your work as JSON or Markdown. To continue editing later, you can re-import the JSON file using the import features on the start screen (AWS or Azure). They accept the generator's native JSON format as well as their respective native cloud formats. For GCP policies, simply open the saved JSON file, copy its contents, and start a new GCP policy from scratch — the JSON format preserves all your settings.
+Use the Download button to save your work as JSON or Markdown. To continue editing later, paste the saved JSON into either import card on the start screen (AWS or Azure). Both recognise a policy saved from this tool, whatever its cloud (GCP included), and also accept their own native format.
+
+If you try to close the tab, or load another policy over changes you haven't downloaded, the generator asks first. Back on the start screen, **Resume editing** takes you back to the policy you had open.
 
 ---
 
@@ -183,7 +187,7 @@ The generator supports 27 AWS resource types organized by FinOps spend impact:
 
 ### Your Workflow for AWS
 
-AWS enforces tagging through **Tag Policies** in **AWS Organizations**. Unlike Azure (where you create one policy per tag), AWS uses a single policy that covers all your tags at once. Here's the end-to-end workflow.
+AWS enforces tagging through **Tag Policies** in **AWS Organizations**. A single policy covers all your tags at once. Here's the end-to-end workflow.
 
 > **Video walkthrough:** Watch the short video below for a step-by-step demonstration of the AWS workflow.
 
@@ -242,8 +246,8 @@ For deeper analysis, you can use the [FinOps Tag Compliance MCP Server](https://
 
 When you export to AWS Tag Policy format, the generator converts your policy into the AWS Organizations Tag Policy syntax:
 
-- **`enforced_for`** blocks non-compliant resource creation for services that support enforcement mode. Not all AWS services support enforcement — the generator automatically filters to only enforcement-capable services.
-- **`report_required_tag_for`** enables compliance reporting across all supported resource types. This works even for services that don't support enforcement.
+- **`enforced_for`** stops people from setting a tag to a value your policy doesn't allow. The generator lists each selected resource type that AWS can enforce on its own. For RDS databases, EKS and EFS, AWS only accepts enforcement for the whole service (for example `rds:ALL_SUPPORTED`), so the export widens to that service and tells you so.
+- **`report_required_tag_for`** puts your resource types in AWS's compliance report, including resources that are missing a required tag. It also covers types AWS can't enforce, such as SageMaker, Bedrock, Glue and Kinesis, which are reported only.
 
 **Limitations:** AWS Tag Policies do not support regex validation — only allowed value lists. If your policy uses regex patterns, these will not be preserved in the AWS export. The generator warns you about any features that won't carry over.
 
@@ -261,7 +265,7 @@ GCP uses **labels** — key-value pairs attached to resources. Labels have stric
 
 ### Why There's No GCP Import/Export
 
-Unlike AWS (which has Organizations Tag Policies) and Azure (which has Policy Initiatives), **GCP does not have a native label policy format** that you can upload to the GCP console to enforce labeling rules. GCP labels are applied directly to resources — there is no central policy document you load into GCP that says "these labels are required on these resources."
+Unlike AWS (which has Organizations Tag Policies) and Azure (which has Azure Policy), **GCP does not have a native label policy format** that you can upload to the GCP console to enforce labeling rules. GCP labels are applied directly to resources — there is no central policy document you load into GCP that says "these labels are required on these resources."
 
 This means the GCP policy you build in this tool is not meant to be uploaded to GCP. Instead, it serves as the **source of truth for your labeling standards**, and is designed to be used with the [FinOps Tag Compliance MCP Server](https://github.com/OptimNow/finops-tag-compliance-mcp). The MCP Server reads your policy JSON, scans your GCP project for resources, and reports which ones are missing required labels or have invalid values.
 
@@ -294,7 +298,7 @@ The generator supports 39 GCP resource types organized by FinOps spend impact. O
 
 Azure uses **tags** — key-value pairs attached to resources. Azure tags have the following constraints:
 
-- Tag names: max **512 characters**, cannot contain `<>%&\?/`, cannot use reserved prefixes (`microsoft`, `azure`, `windows`)
+- Tag names: max **512 characters** (128 on storage accounts), cannot contain `<>%&\?/`. The generator also blocks names starting with `microsoft`, `azure` or `windows`
 - Tag values: max **256 characters**
 - Each resource can have at most **50 tags**
 - Convention is typically PascalCase (e.g., `CostCenter`, `Environment`, `Owner`)
@@ -311,17 +315,37 @@ For FinOps purposes, you enforce tagging through **Azure Policy**, which can den
 
 ### Your Workflow for Azure
 
-Unlike GCP (which has no native policy format), Azure Policy lets you enforce tagging directly. Here's the end-to-end workflow.
+Unlike GCP (which has no native policy format), Azure Policy lets you enforce tagging directly. There are two ways to get your policy into Azure:
 
-> **Video walkthrough:** Watch the short video below for a step-by-step demonstration of the Azure workflow.
+- **The tagging bundle (recommended).** Download one file and deploy every tag rule with a single Azure CLI command. See [Deploy the tagging bundle](#deploy-the-tagging-bundle).
+- **One tag at a time in the Azure Portal.** Copy each tag's rule with the **Azure JSON** button and create the policy definitions by hand. This is what the video shows.
+
+#### Deploy the tagging bundle
+
+1. Build your policy with **Azure** selected, then click **Download → Azure Policy**. Read the notes in the dialog, then download `azure_tagging_bundle.json`.
+2. Deploy it to your subscription with the Azure CLI (you need permission to create policy definitions):
+
+   ```bash
+   az deployment sub create --location westeurope --template-file azure_tagging_bundle.json
+   ```
+
+   Any region works for `--location`: it only sets where Azure keeps the deployment record.
+3. Assign the **Tagging Governance Initiative** it created, in the portal (**Policy → Definitions**) or with `az policy assignment create`.
+4. To fill tags on existing resources from their resource group, give the assignment a managed identity with the **Tag Contributor** role, then run a remediation task.
+
+The bundle deploys at subscription scope. Deploying it to a management group needs a different template, which the generator doesn't produce yet.
+
+#### Or: one tag at a time in the Azure Portal
+
+> **Video walkthrough:** Watch the short video below for a step-by-step demonstration of this workflow.
 
 <https://www.loom.com/share/4df5b16ee04a4edfa16470177a77ceeb>
 
-**Key takeaway from the video:** With Azure, you create **one policy definition per tag** — this is different from AWS, where a single policy covers all tags. The generator's green **"Azure JSON"** button on each tag card makes this easy: click it to copy the ready-to-paste JSON for that tag, then create the corresponding policy definition in Azure Portal. Once all your tag policies are defined, you assign them to your subscription or resource group, and Azure will deny (for required tags) or audit (for optional tags) any resource that doesn't comply.
+With this method you create **one policy definition per tag**. The generator's green **"Azure JSON"** button on each tag card copies the ready-to-paste JSON for that tag. Once all your tag policies are defined, you assign them to your subscription or resource group, and Azure will deny (for required tags) or audit (for optional tags) any resource that doesn't comply.
 
 Here's the workflow in detail:
 
-#### 1. Build Your Policy in the Generator
+##### 1. Build Your Policy in the Generator
 
 1. Open the tool and select **Azure** as your cloud provider
 2. Choose a template (e.g., **Cost Allocation**) or start blank
@@ -330,9 +354,9 @@ Here's the workflow in detail:
 
 Each tag generates its own standalone JSON block — this is by design, because Azure requires one policy definition per tag (unlike AWS where all tags are in a single policy).
 
-> **Tip:** You can also click **Download → Azure Policy** to get all tags exported as a single Azure Policy Initiative file. But for day-to-day use, the per-tag **Azure JSON** button is faster — copy, paste into Portal, done.
+> **Tip:** To deploy every tag in one go instead, use the [tagging bundle](#deploy-the-tagging-bundle).
 
-#### 2. Create Policy Definitions in Azure Portal
+##### 2. Create Policy Definitions in Azure Portal
 
 In Azure, you create **one policy definition per tag**. For each tag:
 
@@ -394,7 +418,7 @@ This JSON enforces two things: the tag must exist on the resource, **and** its v
 
 > **Important:** The Policy Rule editor is a single JSON editor — `parameters` and `policyRule` go in the same block, not in separate fields.
 
-#### 3. Assign the Policy
+##### 3. Assign the Policy
 
 Once a policy definition is saved, you need to assign it for it to take effect:
 
@@ -407,13 +431,13 @@ Once a policy definition is saved, you need to assign it for it to take effect:
 
 The policy is now active. Any new resource created within the scope must comply with the tag requirement.
 
-#### 4. Test the Enforcement
+##### 4. Test the Enforcement
 
 - Try creating a resource (e.g., a Storage Account) **without** the required tag → Azure should **deny** the request
 - Try again **with** the required tag → the creation should succeed
 - For `audit` effect policies, resources will be created but flagged as non-compliant in the Policy compliance dashboard
 
-#### 5. Optional: Group into an Initiative
+##### 5. Optional: Group into an Initiative
 
 Once you have multiple policy definitions, you can group them into an **Initiative** (Policy Set):
 
@@ -425,15 +449,13 @@ This makes it easier to manage all your FinOps tagging rules as a single unit.
 
 ### Importing an Existing Azure Policy
 
-If you already have Azure Policy definitions for tagging, you can import them into the generator:
+The **Import Azure Policy** card reads files this tool produced:
 
-1. In Azure Portal, go to **Policy → Definitions** → find your policy
-2. Click the policy → click **Policy JSON** (or **JSON View**)
-3. Copy the JSON
-4. In the generator start screen, paste it in the **Import Azure Policy** tile
-5. The generator converts it to its format for editing
+- a tagging bundle (`azure_tagging_bundle.json`), from this version of the tool or an older one
+- an initiative file exported by older versions of the tool
+- a policy JSON you saved from the generator
 
-The importer understands both single policy definitions and full initiative JSON with `policyDefinitions` arrays.
+Policy definitions written by hand in the Azure Portal can't be imported. The card tells you when a file isn't in a shape it recognises.
 
 ### Supported Resource Types (89 types)
 
@@ -457,13 +479,12 @@ Azure resource types use the `Microsoft.*` namespace format (e.g., `Microsoft.Co
 
 ### Tag Inheritance
 
-The exported file includes recommendations for four built-in Azure Policies that automatically inherit tags from resource groups and subscriptions. These are especially useful for managed resource groups (AKS, Databricks, Synapse, Azure ML) where you cannot directly tag the resources inside them. Look for the `tagInheritanceRecommendations` section in your exported JSON.
+For each tag, the tagging bundle adds Azure's built-in policy **Inherit a tag from the resource group if missing**. When a resource lacks the tag, Azure copies the value from its resource group. It never overwrites a value set on the resource. To apply it to resources that already exist, give the initiative assignment a managed identity with the **Tag Contributor** role and run a remediation task. The managed resource groups that AKS, Databricks, Synapse and Azure ML create often block tagging of the resources inside them, so expect some gaps there.
 
 ### Limitations
 
 - Azure Policy does not support regex validation — only allowed value lists. If your policy uses regex patterns, these will not be preserved in the Azure export.
-- Tag names have strict character restrictions and reserved prefix rules.
-- Storage account names have a 24-character limit which can conflict with longer tag-based naming conventions.
+- Tag names can't contain `<>%&\?/`, and tag names on storage accounts are limited to 128 characters.
 - Services that create managed resource groups (AKS, Databricks, Synapse, Azure ML, Managed Applications, App Service Environment) have limited tagging on resources inside those groups — use tag inheritance policies from the resource group level.
 - The generator warns you about any features that won't carry over during export.
 
