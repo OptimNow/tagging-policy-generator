@@ -363,21 +363,18 @@ const App: React.FC = () => {
 
   // Export
   const handleDownloadJson = () => {
-    (window as any).trackEvent?.('policy_downloaded', { format: 'json' });
     downloadJson(policyForExport());
     markSaved();
     setShowDownloadMenu(false);
   };
 
   const handleDownloadMarkdown = () => {
-    (window as any).trackEvent?.('policy_downloaded', { format: 'markdown' });
     downloadMarkdown(policyForExport());
     markSaved();
     setShowDownloadMenu(false);
   };
 
   const handleDownloadAwsPolicy = () => {
-    (window as any).trackEvent?.('policy_downloaded', { format: 'aws-policy' });
     const warnings = getAwsExportWarnings(policy);
     setShowDownloadMenu(false);
     if (warnings.limitations.length === 0 && warnings.deploymentNotes.length === 0) {
@@ -395,7 +392,6 @@ const App: React.FC = () => {
   };
 
   const handleDownloadAzurePolicy = () => {
-    (window as any).trackEvent?.('policy_downloaded', { format: 'azure-policy' });
     const warnings = getAzureExportWarnings(policy);
     setShowDownloadMenu(false);
     if (warnings.limitations.length === 0 && warnings.deploymentNotes.length === 0) {
@@ -413,7 +409,6 @@ const App: React.FC = () => {
   };
 
   const copyToClipboard = async () => {
-    (window as any).trackEvent?.('policy_downloaded', { format: 'clipboard' });
     try {
       // Copy whatever the preview is currently showing — keeps Copy in sync
       // with the Internal / native-format toggle in the toolbar.
@@ -435,7 +430,7 @@ const App: React.FC = () => {
 
         {/* Top Bar with Logo and Theme Toggle */}
         <div className="max-w-5xl w-full mx-auto flex items-center justify-between mb-8">
-          <a href="https://www.optimnow.io" target="_blank" rel="noopener noreferrer" onClick={() => { (window as any).trackEvent?.('optimnow_cta_clicked', { source: 'tagpolgenerator_header' }); }}>
+          <a href="https://www.optimnow.io" target="_blank" rel="noopener noreferrer">
             <img
               src={isDark ? "/Images/logo-darkbackground.png" : "/Images/logo.png"}
               alt="OptimNow Logo"
@@ -561,13 +556,7 @@ const App: React.FC = () => {
                     {filteredTemplates.map(t => (
                       <button
                         key={`${t.provider}-${t.name}`}
-                        onClick={() => {
-                          (window as any).trackEvent?.('template_applied', {
-                            template_name: t.name,
-                            provider: t.provider
-                          });
-                          applyTemplate(t.name, t.provider);
-                        }}
+                        onClick={() => applyTemplate(t.name, t.provider)}
                         className={`flex items-center gap-2 px-4 py-2 rounded text-sm transition-colors border ${isDark ? 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20' : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'}`}
                       >
                         <LayoutTemplate size={14} className="text-gray-400" />
