@@ -19,7 +19,7 @@ npm run build        # Build for production (outputs to dist/)
 npm run preview      # Preview production build locally
 ```
 
-**No test runner is wired into package.json.** There is no linting setup. A standalone smoke script, `test-providers.mjs`, sits at the repo root and is run manually with `node test-providers.mjs`. Manual UAT procedures live in `doc/uat/`.
+**No test runner is wired into package.json.** There is no linting setup. A standalone smoke script, `test-providers.mjs`, sits at the repo root and is run manually with `node test-providers.mjs`. It writes a temporary `_test_entry.ts` and runs it with `npx tsx`, so the first run downloads tsx if it isn't installed. Manual UAT procedures live in `doc/uat/`.
 
 ## Architecture Overview
 
@@ -52,7 +52,8 @@ App.tsx (state management, provider-aware routing)
 ├─> exporter.ts (JSON/Markdown/AWS/Azure downloads; GCP handler exists but is unused)
 ├─> converter.ts (AWS Organizations ↔ MCP format conversion)
 ├─> gcp-converter.ts (GCP Label Policy ↔ MCP; not wired into App.tsx)
-└─> azure-converter.ts (Azure ARM tagging bundle ↔ MCP format conversion)
+├─> azure-converter.ts (Azure ARM tagging bundle ↔ MCP format conversion)
+└─> native-import.ts (reloads a policy JSON saved from this tool)
 ```
 
 ### Key Type Definitions (types.ts)
@@ -82,7 +83,7 @@ App.tsx (state management, provider-aware routing)
 - Checks: required tag existence, duplicate names, empty fields, valid regex patterns, resource type selection
 - Provider-aware: validates `applies_to` entries against the policy's `cloud_provider` resource list
 - GCP-specific rules: label keys must be lowercase (`^[a-z][a-z0-9_-]*$`), max 63 chars for keys and values
-- Azure-specific rules: tag names cannot contain `<>%&\?/`, cannot use reserved prefixes (`microsoft`, `azure`, `windows`), max 512 chars for keys, max 256 chars for values, max 50 tags per resource
+- Azure-specific rules: tag names cannot contain `<>%&\?/`, max 512 chars for keys (128 when the tag applies to storage accounts), max 256 chars for values, max 50 tags per resource. It also rejects names starting with `microsoft`, `azure` or `windows`; Microsoft's tag limits don't include that rule, and it is an open review finding
 - Defaults missing `cloud_provider` to `'aws'` for backward compatibility
 - Returns array of error strings displayed in UI footer
 
@@ -142,7 +143,7 @@ App.tsx (state management, provider-aware routing)
   - Visual indicators for partial selections (opacity on indeterminate state)
   - Grid layout adapts: `grid-cols-2` for AWS (short names), `grid-cols-1` for GCP/Azure (long URIs)
   - Placeholder text adapts: `e.g. CostCenter` (AWS/Azure) vs `e.g. cost_center` (GCP)
-- State: `isExpanded`, `testRegexInput`, `regexTestResult`, `expandedCategories`
+- State: `isExpanded`, `testRegexInput`, `regexTestResult`, `expandedCategories`, `azureCopied`
 - `expandedCategories` resets when `cloudProvider` changes
 
 **components/ExportWarningsModal.tsx**
@@ -172,13 +173,13 @@ The tool bridges the internal MCP format with native policy formats for AWS, GCP
 ### AWS Organizations Tag Policy Format (converter.ts)
 
 - Uses `@@assign` operators for policy inheritance
-- `enforced_for`: Blocks non-compliant operations (service:ALL_SUPPORTED syntax only)
+- `enforced_for`: Blocks non-compliant operations. Accepts individual resource types that AWS can enforce, or `<service>:ALL_SUPPORTED`
 - `report_required_tag_for`: Drives compliance reporting (accepts specific resource types)
-- Limitations: No regex support, enforcement limited to specific services
-- Critical mapping functions:
-  - `convertToEnforcedForFormat()`: Filters to enforcement-capable services, converts to service:ALL_SUPPORTED
-  - `convertToReportRequiredFormat()`: Maps internal types (e.g., `rds:db-instance`) to AWS types (e.g., `rds:db`)
-  - `parseEnforcedFor()`: Handles AWS wildcard expansion (service:ALL_SUPPORTED → specific resource types)
+- Limitations: No regex support; some types can only be enforced service-wide, and some can only be reported on
+- Key helpers:
+  - `normaliseResourceType()`: Maps older or alternative names to AWS's (e.g., `rds:db-instance` → `rds:db`, `efs:` → `elasticfilesystem:`)
+  - `resolveAppliesTo()`: Import. Combines the exact types from both lists; expands a `service:ALL_SUPPORTED` wildcard only for services with no exact type
+  - `planEnforcement()`: Export. Splits `applies_to` into individually enforced types, services widened to `ALL_SUPPORTED`, reporting-only types and unknown types
 
 ### GCP Label Policy Format (gcp-converter.ts)
 
@@ -186,7 +187,7 @@ The tool bridges the internal MCP format with native policy formats for AWS, GCP
 - Structure: `{ label_policy: { labels: { ... }, naming_rules: { ... } } }`
 - Each label has: `label_key`, `description`, `allowed_values`, `enforced_for` (resource types), `required` (boolean)
 - Limitations: No regex support, keys must be lowercase, max 63 chars for keys and values
-- Auto-lowercases keys on export: uppercase chars become underscores
+- Lowercases keys on export and replaces any character outside `a-z0-9_-` with an underscore
 - Resource types use full GCP URIs (e.g., `compute.googleapis.com/Instance`)
 
 ### Azure ARM Tagging Bundle (azure-converter.ts)
@@ -231,8 +232,9 @@ Note: an earlier version emitted `tagInheritanceRecommendations` and `managedRes
 ## Data Privacy
 
 The application is 100% client-side:
-- No API calls (except loading the app itself)
-- Uses Vercel Analytics for basic page view and Web Vitals tracking (privacy-friendly, no personal data collected)
+- No backend API calls. Besides the app itself, the page loads the Tailwind CDN and Google Fonts
+- Uses Vercel Analytics (`<Analytics />` in index.tsx) for page views and Web Vitals
+- Uses Google Analytics 4 (`G-188H55KPFM`, set up in index.html). A hostname guard limits it to `optimnow.io` hosts and localhost, so forks don't report into OptimNow's property. `App.tsx` sends events through `window.trackEvent`: `optimnow_cta_clicked`, `template_applied` (template name, provider) and `policy_downloaded` (format). Events carry no policy content
 - No server-side processing
 - Policies never leave the browser unless user explicitly downloads
 
@@ -249,8 +251,8 @@ The application is 100% client-side:
 ### Adding a New Resource Type
 **AWS:**
 1. Update `AWS_RESOURCE_CATEGORIES` in types.ts (categorize by spend impact)
-2. If adding enforcement support, update `SERVICES_WITH_ENFORCEMENT_SUPPORT` in converter.ts
-3. Update mappings in `convertToReportRequiredFormat()` if AWS uses different naming
+2. Check the type in AWS's "Resources that support enforcement in tag policies" table. If it can be enforced on its own, add it to `ENFORCEABLE_RESOURCE_TYPES` in converter.ts; if AWS only enforces its service through `ALL_SUPPORTED`, add the service to `SERVICES_WITH_WILDCARD_ENFORCEMENT`
+3. If the app's name for the type differs from AWS's, add it to `RESOURCE_TYPE_ALIASES` in converter.ts
 
 **GCP:**
 1. Update `GCP_RESOURCE_CATEGORIES` in types.ts (categorize by spend impact; 7 categories including Security & Operations)
@@ -273,7 +275,7 @@ The application is 100% client-side:
 1. For JSON/Markdown: Edit functions in services/exporter.ts
 2. For AWS format: Modify converter.ts (be mindful of AWS policy syntax constraints)
 3. For GCP format: Modify gcp-converter.ts (be mindful of GCP label restrictions: lowercase, 63-char limits)
-4. For Azure format: Modify azure-converter.ts (be mindful of Azure tag restrictions: forbidden chars, reserved prefixes, 512/256 char limits)
+4. For Azure format: Modify azure-converter.ts (be mindful of Azure tag restrictions: forbidden chars, 512/256 char limits)
 5. Add warnings via `getAwsExportWarnings()`, `getGcpExportWarnings()`, or `getAzureExportWarnings()`. All three return `CategorizedExportWarnings`: put feature loss in `limitations`, and scope or deployment guidance in `deploymentNotes`. `ExportWarningsModal` renders the two groups separately, so the split matters
 
 ## File Organization
@@ -308,7 +310,7 @@ The application is 100% client-side:
 │   └── ThemeContext.tsx          # Dark/light theme management
 ├── public/                       # Images, robots.txt, sitemap.xml, llms.txt
 ├── examples/                     # Sample policy files (AWS, GCP, and Azure)
-├── doc/                          # AWS tagging reference, security audit, UAT guides (doc/uat/)
+├── doc/                          # AWS tagging and resource-type references, original generator prompt, security audit, UAT guides (doc/uat/)
 ├── .kiro/specs/                  # UAT protocol specs (requirements, design, tasks)
 └── dist/                         # Build output (gitignored)
 ```
@@ -317,12 +319,12 @@ The application is 100% client-side:
 
 - **No TypeScript compilation step**: Vite handles TS directly; `tsc` not run in build
 - **No backend**: All processing happens in browser; avoid adding API dependencies
-- **AWS policy limitations**: converter.ts documents which features are lossy (regex validation, specific resource types in enforced_for)
+- **AWS policy limitations**: converter.ts documents which features are lossy (regex validation, types AWS only enforces service-wide, reporting-only types)
 - **GCP policy limitations**: gcp-converter.ts documents lossy features (regex validation, uppercase keys auto-lowercased, 63-char limits)
 - **GCP resource type format**: Always use full URIs (`service.googleapis.com/ResourceType`), never short names
 - **GCP label key rules**: Must be lowercase, start with a letter, match `^[a-z][a-z0-9_-]*$`, max 63 chars
 - **Azure resource type format**: Always use `Microsoft.*` namespace format (e.g., `Microsoft.Compute/virtualMachines`), never short names
-- **Azure tag constraints**: Names cannot contain `<>%&\?/`, cannot use reserved prefixes (`microsoft`, `azure`, `windows`), max 512 chars for keys, max 256 chars for values, max 50 tags per resource
+- **Azure tag constraints**: Names cannot contain `<>%&\?/`, max 512 chars for keys (128 on storage accounts), max 256 chars for values, max 50 tags per resource. The reserved-prefix check (`microsoft`, `azure`, `windows`) in validator.ts and the export warnings is not an Azure rule
 - **Azure policy limitations**: azure-converter.ts documents lossy features (regex validation not supported, managed resource group limitations, FOCUS export gaps)
 - **Provider backward compatibility**: Missing `cloud_provider` always defaults to `'aws'` throughout the app
 - **Port configuration**: Dev server runs on 3000, not Vite's default 5173 (configured in vite.config.ts)
